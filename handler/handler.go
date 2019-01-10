@@ -28,7 +28,7 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method == http.MethodConnect {
 		p.handlerHTTPS(w, r)
-	} else if p.containTarget(r) {
+	} else if r.Method == http.MethodGet && p.containTarget(r) {
 		p.handlerCache(w, r)
 	} else {
 		p.handlerHTTP(w, r)
@@ -75,6 +75,7 @@ func (p *proxy) handlerHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	defer res.Body.Close()
 
+	copyHeaders(w.Header(), res.Header)
 	w.WriteHeader(res.StatusCode)
 
 	_, err = io.Copy(w, res.Body)
@@ -132,10 +133,6 @@ func copyRemoteToClient(remote, hjClient net.Conn) {
 	remoteAddr := remote.RemoteAddr().String()
 	clientAddr := hjClient.RemoteAddr().String()
 	log.Printf("Bytes: %d, Remote Address: %s, Client Address: %s", nr, remoteAddr, clientAddr)
-}
-
-func rmProxyHeaders(r *http.Request) {
-	r.RequestURI = ""
 }
 
 // New creates new proxy server
