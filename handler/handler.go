@@ -14,8 +14,9 @@ import (
 var http200 = []byte("HTTP/1.1 200 Connection Established\r\n\r\n")
 
 type proxy struct {
-	client *http.Client
-	cache  cache.Cache
+	client  *http.Client
+	cache   cache.Cache
+	targets []string
 }
 
 func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -27,7 +28,7 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method == http.MethodConnect {
 		p.handlerHTTPS(w, r)
-	} else if strings.Contains(r.URL.Host, "tut.by") || strings.Contains(r.Header.Get("Origin"), "tut.by") {
+	} else if p.containTarget(r) {
 		p.handlerCache(w, r)
 	} else {
 		p.handlerHTTP(w, r)
@@ -106,6 +107,16 @@ func (p *proxy) handlerHTTPS(w http.ResponseWriter, r *http.Request) {
 	go copyRemoteToClient(hjClient, remote)
 }
 
+func (p *proxy) containTarget(r *http.Request) bool {
+	for _, target := range p.targets {
+		if strings.Contains(r.URL.Host, target) || strings.Contains(r.Header.Get("Referer"), target) {
+			return true
+		}
+	}
+
+	return false
+}
+
 func copyRemoteToClient(remote, hjClient net.Conn) {
 	defer func() {
 		remote.Close()
@@ -128,9 +139,9 @@ func rmProxyHeaders(r *http.Request) {
 }
 
 // New creates new proxy server
-func New(client *http.Client, cache cache.Cache, port string) *http.Server {
+func New(client *http.Client, cache cache.Cache, port string, targets []string) *http.Server {
 	return &http.Server{
 		Addr:    port,
-		Handler: &proxy{client, cache},
+		Handler: &proxy{client, cache, targets},
 	}
 }
