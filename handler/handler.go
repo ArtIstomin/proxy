@@ -1,8 +1,8 @@
 package handler
 
 import (
+	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
@@ -11,6 +11,10 @@ import (
 	"github.com/artistomin/proxy/cache"
 )
 
+var hosts = map[string]string{
+	"www.tut.by":  "178.172.160.2",
+	"www.mail.ru": "94.100.180.201",
+}
 var http200 = []byte("HTTP/1.1 200 Connection Established\r\n\r\n")
 
 type proxy struct {
@@ -20,15 +24,17 @@ type proxy struct {
 }
 
 func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("HERE")
 	defer func() {
 		if err := recover(); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 		}
 	}()
 
-	if r.Method == http.MethodConnect {
+	/* if r.Method == http.MethodConnect {
 		p.handlerHTTPS(w, r)
-	} else if r.Method == http.MethodGet && p.containTarget(r) {
+	} else */if r.Method == http.MethodGet {
+		fmt.Println("1")
 		p.handlerCache(w, r)
 	} else {
 		p.handlerHTTP(w, r)
@@ -36,34 +42,37 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *proxy) handlerCache(w http.ResponseWriter, r *http.Request) {
-	log.Printf("Method: %s, HOST: %s, URI: %s", r.Method, r.URL.Host, r.RequestURI)
+	uri := "https://" + hosts[r.Host] + r.URL.String()
+	fmt.Println(uri)
+	log.Printf("Method: %s, URL: %s", r.Method, uri)
 
-	uri := r.RequestURI
-	cached := p.cache.Has(uri)
-
-	if cached {
-		content := p.cache.Get(uri)
-		w.Write(content)
-		log.Printf("Bytes: %d, Host: %s, Cached: %t", len(content), r.URL.Host, cached)
-		return
-	}
+	// cached := p.cache.Has(uri)
+	/*
+		if cached {
+			content := p.cache.Get(uri)
+			w.Write(content)
+			log.Printf("Bytes: %d, Host: %s, Cached: %t", len(content), r.URL.Host, cached)
+			return
+		} */
 
 	res, err := p.client.Get(uri)
-
+	// fmt.Printf("%+v\n", res)
 	if err != nil {
+
+		fmt.Println("err", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	defer res.Body.Close()
+	res.Body.Close()
 
 	w.WriteHeader(res.StatusCode)
 
-	body, err := ioutil.ReadAll(res.Body)
+	//body, err := ioutil.ReadAll(res.Body)
 
-	p.cache.Put(uri, body)
-	w.Write(body)
+	// p.cache.Put(uri, body)
+	// w.Write(body)
 
-	log.Printf("Bytes: %d, Host: %s, Cached: %t", len(body), r.URL.Host, cached)
+	//log.Printf("Bytes: %d, Host: %s", len(body), r.URL.Host)
 }
 
 func (p *proxy) handlerHTTP(w http.ResponseWriter, r *http.Request) {
@@ -85,7 +94,7 @@ func (p *proxy) handlerHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (p *proxy) handlerHTTPS(w http.ResponseWriter, r *http.Request) {
+/* func (p *proxy) handlerHTTPS(w http.ResponseWriter, r *http.Request) {
 	hj, _ := w.(http.Hijacker)
 	hjClient, _, err := hj.Hijack()
 
@@ -106,11 +115,11 @@ func (p *proxy) handlerHTTPS(w http.ResponseWriter, r *http.Request) {
 
 	go copyRemoteToClient(remote, hjClient)
 	go copyRemoteToClient(hjClient, remote)
-}
+} */
 
 func (p *proxy) containTarget(r *http.Request) bool {
 	for _, target := range p.targets {
-		if strings.Contains(r.URL.Host, target) || strings.Contains(r.Header.Get("Referer"), target) {
+		if strings.Contains(r.Host, target) || strings.Contains(r.Header.Get("Referer"), target) {
 			return true
 		}
 	}
