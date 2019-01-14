@@ -1,29 +1,31 @@
 package main
 
 import (
+	"crypto/tls"
 	"flag"
 	"log"
 	"net/http"
-	"strings"
 
 	"github.com/artistomin/proxy/cache"
 	"github.com/artistomin/proxy/handler"
 )
 
 var (
-	port    = flag.String("port", ":3000", "Port")
-	targets = flag.String("targets", "tut.by,mail.ru", "add some sites")
+	port = flag.String("port", ":3000", "Port")
 )
 
 func main() {
 	flag.Parse()
 
-	targets := *targets
-	targetsSlice := strings.Split(targets, ",")
-
-	client := &http.Client{}
+	client := &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true,
+			},
+		},
+	}
 	newCache := cache.New()
-	proxy := handler.New(client, newCache, *port, targetsSlice)
+	proxy := handler.New(client, newCache, *port)
 
 	log.Printf("Listening http on %s \n", *port)
 	log.Fatal(proxy.ListenAndServe())
