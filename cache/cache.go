@@ -7,6 +7,7 @@ type Cacher interface {
 	Get(host, url string) []byte
 	Put(host, url string, content []byte)
 	Has(host, key string) bool
+	Size(host string) int
 }
 
 type Cache struct {

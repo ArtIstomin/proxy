@@ -50,4 +50,7 @@ certs/*
 !certs/myCA.cer
 !certs/myCA.key
 
+### Config File ###
+config.json
+
 # End of https://www.gitignore.io/api/go,git,visualstudiocode
