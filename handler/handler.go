@@ -9,11 +9,14 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/artistomin/proxy/cache"
 	"github.com/artistomin/proxy/config"
 )
+
+const sizeValue = 1024
 
 type proxy struct {
 	cache   *cache.Cache
@@ -23,6 +26,7 @@ type proxy struct {
 func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer func() {
 		if err := recover(); err != nil {
+			log.Printf("Panic: %v", err)
 			w.WriteHeader(http.StatusInternalServerError)
 		}
 	}()
@@ -38,37 +42,75 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *proxy) handlerCache(w http.ResponseWriter, r *http.Request, hostCfg config.Domain) {
-	// cache := hostCfg.Cache
-	bCache := hostCfg.BrowserCache
+	var res *http.Response
+	var body []byte
+	host := r.Host
+	url := r.URL.String()
+	cacheCfg := hostCfg.Cache
+	bCacheCfg := hostCfg.BrowserCache
 
-	conn, err := p.tcpConn(r)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	defer conn.Close()
+	if cacheCfg.Enabled && p.cache.Has(host, url) {
+		cachedValue := p.cache.Get(host, url)
 
-	res, err := p.HTTPRequest(conn, r)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		body = cachedValue.Body
+		res = &http.Response{
+			Status:     cachedValue.Response.Status,
+			StatusCode: cachedValue.Response.StatusCode,
+			Proto:      cachedValue.Response.Proto,
+			ProtoMajor: cachedValue.Response.ProtoMajor,
+			ProtoMinor: cachedValue.Response.ProtoMinor,
+			Header:     cachedValue.Response.Header,
+		}
+
+		log.Printf("From cache: %s, Bytes: %d", url, len(body))
+	} else {
+		conn, err := p.tcpConn(r)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		defer conn.Close()
+
+		res, err = p.HTTPRequest(conn, r)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		defer res.Body.Close()
+
+		body, err = ioutil.ReadAll(res.Body)
+		if err != nil {
+			log.Printf("Body error: %v", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		if p.shouldResCached(host, r.URL.Path, len(body), cacheCfg) {
+			ttl := time.Duration(getTTL(cacheCfg.TTL, cacheCfg.TTLUnits))
+			expireTime := time.Now().UTC().Add(ttl)
+			response := cache.Response{
+				Status:     res.Status,
+				StatusCode: res.StatusCode,
+				Proto:      res.Proto,
+				ProtoMajor: res.ProtoMajor,
+				ProtoMinor: res.ProtoMinor,
+				Header:     res.Header,
+			}
+
+			p.cache.Put(host, url, response, body, expireTime)
+		}
 	}
-	defer res.Body.Close()
 
 	copyHeaders(w.Header(), res.Header)
+	w.Header().Del("Date")
 
-	if bCache.Enabled {
-		ttl := getTTL(bCache.TTL, bCache.TTLUnits)
+	if bCacheCfg.Enabled {
+		ttl := getTTL(bCacheCfg.TTL, bCacheCfg.TTLUnits)
 		ttlStr := strconv.Itoa(ttl)
 
 		w.Header().Set("Cache-Control", "public, max-age="+ttlStr)
-	}
-
-	body, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		fmt.Println(err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+	} else {
+		w.Header().Del("Cache-control")
 	}
 
 	w.Write(body)
@@ -93,7 +135,7 @@ func (p *proxy) handlerHTTP(w http.ResponseWriter, r *http.Request) {
 
 	body, err := ioutil.ReadAll(res.Body)
 	if err != nil {
-		fmt.Println(err)
+		log.Printf("Body error: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -143,6 +185,30 @@ func (p *proxy) tcpConn(r *http.Request) (net.Conn, error) {
 	return conn, nil
 }
 
+func (p *proxy) shouldResCached(host, path string, bodySize int, cacheCfg config.Cache) bool {
+	if !cacheCfg.Enabled {
+		return false
+	}
+
+	if (p.cache.Size(host) + bodySize) >= maxSizeBytes(cacheCfg.MaxSize, cacheCfg.SizeUnits) {
+		return false
+	}
+
+	if bodySize > maxSizeBytes(cacheCfg.CacheObject.MaxSize, cacheCfg.CacheObject.SizeUnits) {
+		return false
+	}
+
+	if len(cacheCfg.Cached) > 0 && !pathHasSuffix(path, cacheCfg.Cached) {
+		return false
+	}
+
+	if len(cacheCfg.NoCached) > 0 && pathContainsString(path, cacheCfg.NoCached) {
+		return false
+	}
+
+	return true
+}
+
 func getTTL(ttl time.Duration, units string) int {
 	var ttlDuration time.Duration
 
@@ -158,12 +224,38 @@ func getTTL(ttl time.Duration, units string) int {
 	return int(ttlDuration.Seconds())
 }
 
-func filterRequest(URL string) bool {
-	/* for _, extension := range extensions {
-		if strings.Contains(URL, extension) {
+func maxSizeBytes(size int, units string) int {
+	var maxSize int
+	units = strings.ToLower(units)
+
+	switch units {
+	case "kb":
+		maxSize = size * sizeValue
+	case "mb":
+		maxSize = size * sizeValue * sizeValue
+	case "gb":
+		maxSize = size * sizeValue * sizeValue * sizeValue
+	}
+
+	return maxSize
+}
+
+func pathHasSuffix(path string, suffixes []string) bool {
+	for _, suffix := range suffixes {
+		if strings.HasSuffix(path, suffix) {
 			return true
 		}
-	} */
+	}
+
+	return false
+}
+
+func pathContainsString(path string, subStrings []string) bool {
+	for _, subString := range subStrings {
+		if strings.Contains(path, subString) {
+			return true
+		}
+	}
 
 	return false
 }
@@ -175,14 +267,3 @@ func New(domains config.Domains, cache *cache.Cache, port string) *http.Server {
 		Handler: &proxy{cache, domains},
 	}
 }
-
-/* if hostCfg.Cache.Enabled && hostCfg.BrowserCache.Enabled {
-	fmt.Println("Cache and browser cache enabled")
-} else if hostCfg.Cache.Enabled {
-	fmt.Println("Cache enabled")
-} else if hostCfg.BrowserCache.Enabled {
-	fmt.Println("Browser cache enabled")
-} else {
-	fmt.Println("Cache and browser cache disabled")
-	p.handlerHTTP(w, r)
-} */
