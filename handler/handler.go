@@ -2,27 +2,22 @@ package handler
 
 import (
 	"bufio"
-	"bytes"
-	"crypto/tls"
-	"io"
+	"fmt"
 	"io/ioutil"
 	"log"
+	"net"
 	"net/http"
 	"net/http/httputil"
-	"net/url"
-	"strings"
+	"strconv"
+	"time"
 
 	"github.com/artistomin/proxy/cache"
-)
-
-var (
-	http200    = []byte("HTTP/1.1 200 Connection Established\r\n\r\n")
-	extensions = [...]string{".jpeg", ".jpg", ".js", ".png"}
+	"github.com/artistomin/proxy/config"
 )
 
 type proxy struct {
-	client *http.Client
-	cache  cache.Cache
+	cache   *cache.Cache
+	domains config.Domains
 }
 
 func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -32,49 +27,28 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	if r.Method == http.MethodConnect {
-		p.handlerHTTPS(w, r)
-	} else if r.Method == http.MethodGet && filterAssets(r.URL.String()) {
-		p.handlerCache(w, r)
-	} else {
+	log.Printf("Method: %s, Host: %s, Url: %s\n", r.Method, r.Host, r.URL.String())
+	hostCfg := p.domains[r.Host]
+
+	if r.Method != http.MethodGet {
 		p.handlerHTTP(w, r)
+	} else {
+		p.handlerCache(w, r, hostCfg)
 	}
 }
 
-func (p *proxy) handlerCache(w http.ResponseWriter, r *http.Request) {
+func (p *proxy) handlerCache(w http.ResponseWriter, r *http.Request, hostCfg config.Domain) {
+	// cache := hostCfg.Cache
+	bCache := hostCfg.BrowserCache
 
-	uri := r.RequestURI
-	cached := p.cache.Has(uri)
-
-	if cached {
-		logRequest(r, "http")
-
-		content := p.cache.Get(uri)
-		w.Write(content)
-
-		log.Printf("Bytes: %d, Host: %s, URL: %s, Cached: %t", len(content), r.URL.Host, r.URL.String(), cached)
-		return
-	}
-
-	res, err := p.client.Get(uri)
-
+	conn, err := p.tcpConn(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	defer res.Body.Close()
+	defer conn.Close()
 
-	w.WriteHeader(res.StatusCode)
-
-	body, err := ioutil.ReadAll(res.Body)
-
-	p.cache.Put(uri, body)
-	w.Write(body)
-}
-
-func (p *proxy) handlerHTTP(w http.ResponseWriter, r *http.Request) {
-	rmProxyHeaders(r)
-	res, err := p.client.Do(r)
+	res, err := p.HTTPRequest(conn, r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -82,138 +56,133 @@ func (p *proxy) handlerHTTP(w http.ResponseWriter, r *http.Request) {
 	defer res.Body.Close()
 
 	copyHeaders(w.Header(), res.Header)
-	w.WriteHeader(res.StatusCode)
 
-	_, err = io.Copy(w, res.Body)
-	if err != nil && err != io.EOF {
-		log.Printf("occur an error when copying remote response to this client, %v", err)
-		return
+	if bCache.Enabled {
+		ttl := getTTL(bCache.TTL, bCache.TTLUnits)
+		ttlStr := strconv.Itoa(ttl)
+
+		w.Header().Set("Cache-Control", "public, max-age="+ttlStr)
 	}
-}
 
-func (p *proxy) handlerHTTPS(w http.ResponseWriter, r *http.Request) {
-	config := generateCfg(r)
-
-	hj, _ := w.(http.Hijacker)
-	hjClient, _, err := hj.Hijack()
-
+	body, err := ioutil.ReadAll(res.Body)
 	if err != nil {
-		log.Printf("http user failed to get tcp connection")
-		http.Error(w, "Failed", http.StatusBadRequest)
+		fmt.Println(err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	hjClient.Write(http200)
-
-	go func() {
-		defer hjClient.Close()
-		tlsCon := tls.Server(hjClient, config)
-		clientTLSReader := bufio.NewReader(tlsCon)
-		clientTLSWriter := bufio.NewWriter(tlsCon)
-
-		for !isEOF(clientTLSReader) {
-			req, err := http.ReadRequest(clientTLSReader)
-
-			if err != nil && err != io.EOF {
-				log.Printf("Read Request Error: %+#v", err.Error())
-				return
-			}
-
-			if err != nil {
-				log.Printf("cannot read request of MITM HTTP client: %+#v", err.Error())
-				return
-			}
-
-			req.RequestURI = ""
-			req.URL = buildHTTPSUrl(req)
-
-			cached := p.cache.Has(req.URL.String())
-			var res *http.Response
-
-			if cached && req.Method == http.MethodGet {
-				logRequest(req, "https")
-				cachedRes := p.cache.Get(req.URL.String())
-				bytesReader := bytes.NewReader(cachedRes)
-				bufioReader := bufio.NewReader(bytesReader)
-				res, err = http.ReadResponse(bufioReader, req)
-
-				if err != nil {
-					log.Printf("Read Response error: %v\n", err.Error())
-					return
-				}
-
-				log.Printf("Bytes: %d, Host: %s, URL: %s, Cached: %t", len(cachedRes), req.URL.Host, req.URL.String(), cached)
-			} else {
-				resp, err := p.client.Transport.RoundTrip(req)
-				if err != nil {
-					log.Printf("HTTPS client error: %v\n", err.Error())
-					return
-				}
-
-				res = resp
-
-				if filterAssets(req.URL.String()) && req.Method == http.MethodGet {
-					dumpRes, err := httputil.DumpResponse(res, true)
-
-					if err != nil {
-						log.Printf("Dump Response error: %v\n", err.Error())
-						return
-					}
-
-					p.cache.Put(req.URL.String(), dumpRes)
-				}
-
-			}
-
-			err = res.Write(clientTLSWriter)
-			if err != nil {
-				log.Printf("RES write error: %v\n", err.Error())
-				return
-			}
-
-			err = clientTLSWriter.Flush()
-			if err != nil {
-				log.Printf("FLUSH error: %v\n", err.Error())
-				return
-			}
-		}
-	}()
+	w.Write(body)
 }
 
-func buildHTTPSUrl(r *http.Request) *url.URL {
-	url, err := url.Parse("https://" + r.Host + r.URL.String())
+func (p *proxy) handlerHTTP(w http.ResponseWriter, r *http.Request) {
+	conn, err := p.tcpConn(r)
 	if err != nil {
-		log.Printf("Build URL error: %v\n", err.Error())
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
-	return url
-}
+	defer conn.Close()
 
-func logRequest(r *http.Request, proto string) {
-	log.Printf("Method: %s, Proto: %s, Host:%s, Url: %s\n", r.Method, proto, r.Host, r.URL.String())
-}
-
-func isEOF(r *bufio.Reader) bool {
-	_, err := r.Peek(1)
-	if err == io.EOF {
-		return true
+	res, err := p.HTTPRequest(conn, r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
-	return false
+	defer res.Body.Close()
+
+	copyHeaders(w.Header(), res.Header)
+
+	body, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		fmt.Println(err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Write(body)
 }
 
-func filterAssets(URL string) bool {
-	for _, extension := range extensions {
+func (p *proxy) HTTPRequest(conn net.Conn, r *http.Request) (*http.Response, error) {
+	rmProxyHeaders(r)
+
+	dumpReq, err := httputil.DumpRequest(r, true)
+	if err != nil {
+		log.Printf("TCP error: %v\n", err.Error())
+		return nil, err
+	}
+
+	_, err = conn.Write(dumpReq)
+	if err != nil {
+		log.Printf("TCP error: %v\n", err.Error())
+		return nil, err
+	}
+
+	resReader := bufio.NewReader(conn)
+	if err != nil {
+		log.Printf("TCP error: %v\n", err.Error())
+		return nil, err
+	}
+
+	res, err := http.ReadResponse(resReader, r)
+	if err != nil {
+		log.Printf("TCP error: %v\n", err.Error())
+		return nil, err
+	}
+
+	return res, nil
+}
+
+func (p *proxy) tcpConn(r *http.Request) (net.Conn, error) {
+	ip := p.domains[r.Host].IP
+	timeout := time.Duration(p.domains[r.Host].Timeout) * time.Second
+
+	conn, err := net.DialTimeout("tcp", ip, timeout)
+	if err != nil {
+		return nil, fmt.Errorf("TCP connection error: %s", err)
+	}
+
+	return conn, nil
+}
+
+func getTTL(ttl time.Duration, units string) int {
+	var ttlDuration time.Duration
+
+	switch units {
+	case "h":
+		ttlDuration = ttl * time.Hour
+	case "s":
+		ttlDuration = ttl * time.Second
+	case "m":
+		ttlDuration = ttl * time.Minute
+	}
+
+	return int(ttlDuration.Seconds())
+}
+
+func filterRequest(URL string) bool {
+	/* for _, extension := range extensions {
 		if strings.Contains(URL, extension) {
 			return true
 		}
-	}
+	} */
 
 	return false
 }
 
 // New creates new proxy server
-func New(client *http.Client, cache cache.Cache, port string) *http.Server {
+func New(domains config.Domains, cache *cache.Cache, port string) *http.Server {
 	return &http.Server{
 		Addr:    port,
-		Handler: &proxy{client, cache},
+		Handler: &proxy{cache, domains},
 	}
 }
+
+/* if hostCfg.Cache.Enabled && hostCfg.BrowserCache.Enabled {
+	fmt.Println("Cache and browser cache enabled")
+} else if hostCfg.Cache.Enabled {
+	fmt.Println("Cache enabled")
+} else if hostCfg.BrowserCache.Enabled {
+	fmt.Println("Browser cache enabled")
+} else {
+	fmt.Println("Cache and browser cache disabled")
+	p.handlerHTTP(w, r)
+} */

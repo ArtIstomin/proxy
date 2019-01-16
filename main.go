@@ -1,32 +1,38 @@
 package main
 
 import (
-	"crypto/tls"
 	"flag"
 	"log"
-	"net/http"
 
 	"github.com/artistomin/proxy/cache"
+	"github.com/artistomin/proxy/config"
 	"github.com/artistomin/proxy/handler"
 )
 
 var (
-	port = flag.String("port", ":3000", "Port")
+	port    = flag.String("port", ":3000", "Port")
+	cfgPath = flag.String("cfg-path", "config.json", "Path to config file")
 )
 
 func main() {
 	flag.Parse()
 
-	client := &http.Client{
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: true,
-			},
-		},
+	domainsCfg, err := config.Load(*cfgPath)
+	if err != nil {
+		log.Fatal(err)
 	}
-	newCache := cache.New()
-	proxy := handler.New(client, newCache, *port)
+
+	storage := cache.New()
+	proxy := handler.New(domainsCfg, storage, *port)
 
 	log.Printf("Listening http on %s \n", *port)
 	log.Fatal(proxy.ListenAndServe())
 }
+
+/* client := &http.Client{
+	Transport: &http.Transport{
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true,
+		},
+	},
+} */
