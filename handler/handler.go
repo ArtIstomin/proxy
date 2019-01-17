@@ -2,14 +2,13 @@ package handler
 
 import (
 	"bufio"
-	"fmt"
+	"crypto/tls"
 	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
 	"net/http/httputil"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/artistomin/proxy/cache"
@@ -19,8 +18,9 @@ import (
 const sizeValue = 1024
 
 type proxy struct {
-	cache   *cache.Cache
-	domains config.Domains
+	cache      *cache.Cache
+	domains    config.Domains
+	tlsEnabled bool
 }
 
 func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -31,13 +31,17 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	log.Printf("Method: %s, Host: %s, Url: %s\n", r.Method, r.Host, r.URL.String())
-	hostCfg := p.domains[r.Host]
-
-	if r.Method != http.MethodGet {
-		p.handlerHTTP(w, r)
+	if p.tlsEnabled {
+		logRequest(r, "https")
 	} else {
+		logRequest(r, "http")
+	}
+
+	hostCfg := p.domains[r.Host]
+	if r.Method == http.MethodGet {
 		p.handlerCache(w, r, hostCfg)
+	} else {
+		p.handler(w, r, hostCfg)
 	}
 }
 
@@ -64,14 +68,23 @@ func (p *proxy) handlerCache(w http.ResponseWriter, r *http.Request, hostCfg con
 
 		log.Printf("From cache: %s, Bytes: %d", url, len(body))
 	} else {
-		conn, err := p.tcpConn(r)
+		var conn net.Conn
+		var err error
+
+		if p.tlsEnabled {
+			tlsCfg := generateCfg(r)
+			conn, err = p.httpsConn(r, hostCfg, tlsCfg)
+		} else {
+			conn, err = p.httpConn(r, hostCfg)
+		}
+
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		defer conn.Close()
 
-		res, err = p.HTTPRequest(conn, r)
+		res, err = p.Request(conn, r)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -116,15 +129,24 @@ func (p *proxy) handlerCache(w http.ResponseWriter, r *http.Request, hostCfg con
 	w.Write(body)
 }
 
-func (p *proxy) handlerHTTP(w http.ResponseWriter, r *http.Request) {
-	conn, err := p.tcpConn(r)
+func (p *proxy) handler(w http.ResponseWriter, r *http.Request, hostCfg config.Domain) {
+	var conn net.Conn
+	var err error
+
+	if p.tlsEnabled {
+		tlsCfg := generateCfg(r)
+		conn, err = p.httpsConn(r, hostCfg, tlsCfg)
+	} else {
+		conn, err = p.httpConn(r, hostCfg)
+	}
+
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	defer conn.Close()
 
-	res, err := p.HTTPRequest(conn, r)
+	res, err := p.Request(conn, r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -143,7 +165,7 @@ func (p *proxy) handlerHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Write(body)
 }
 
-func (p *proxy) HTTPRequest(conn net.Conn, r *http.Request) (*http.Response, error) {
+func (p *proxy) Request(conn net.Conn, r *http.Request) (*http.Response, error) {
 	rmProxyHeaders(r)
 
 	dumpReq, err := httputil.DumpRequest(r, true)
@@ -173,18 +195,6 @@ func (p *proxy) HTTPRequest(conn net.Conn, r *http.Request) (*http.Response, err
 	return res, nil
 }
 
-func (p *proxy) tcpConn(r *http.Request) (net.Conn, error) {
-	ip := p.domains[r.Host].IP
-	timeout := time.Duration(p.domains[r.Host].Timeout) * time.Second
-
-	conn, err := net.DialTimeout("tcp", ip, timeout)
-	if err != nil {
-		return nil, fmt.Errorf("TCP connection error: %s", err)
-	}
-
-	return conn, nil
-}
-
 func (p *proxy) shouldResCached(host, path string, bodySize int, cacheCfg config.Cache) bool {
 	if !cacheCfg.Enabled {
 		return false
@@ -209,61 +219,22 @@ func (p *proxy) shouldResCached(host, path string, bodySize int, cacheCfg config
 	return true
 }
 
-func getTTL(ttl time.Duration, units string) int {
-	var ttlDuration time.Duration
-
-	switch units {
-	case "h":
-		ttlDuration = ttl * time.Hour
-	case "s":
-		ttlDuration = ttl * time.Second
-	case "m":
-		ttlDuration = ttl * time.Minute
-	}
-
-	return int(ttlDuration.Seconds())
-}
-
-func maxSizeBytes(size int, units string) int {
-	var maxSize int
-	units = strings.ToLower(units)
-
-	switch units {
-	case "kb":
-		maxSize = size * sizeValue
-	case "mb":
-		maxSize = size * sizeValue * sizeValue
-	case "gb":
-		maxSize = size * sizeValue * sizeValue * sizeValue
-	}
-
-	return maxSize
-}
-
-func pathHasSuffix(path string, suffixes []string) bool {
-	for _, suffix := range suffixes {
-		if strings.HasSuffix(path, suffix) {
-			return true
-		}
-	}
-
-	return false
-}
-
-func pathContainsString(path string, subStrings []string) bool {
-	for _, subString := range subStrings {
-		if strings.Contains(path, subString) {
-			return true
-		}
-	}
-
-	return false
-}
-
 // New creates new proxy server
-func New(domains config.Domains, cache *cache.Cache, port string) *http.Server {
-	return &http.Server{
-		Addr:    port,
-		Handler: &proxy{cache, domains},
+func New(domains config.Domains, cache *cache.Cache, port string, tlsEnabled bool) *http.Server {
+	var server *http.Server
+
+	if tlsEnabled {
+		server = &http.Server{
+			Addr:         port,
+			Handler:      &proxy{cache, domains, tlsEnabled},
+			TLSNextProto: make(map[string]func(*http.Server, *tls.Conn, http.Handler), 0),
+		}
+	} else {
+		server = &http.Server{
+			Addr:    port,
+			Handler: &proxy{cache, domains, tlsEnabled},
+		}
 	}
+
+	return server
 }
