@@ -1,0 +1,24 @@
+{
+    "www.un.org": {
+        "ip": "157.150.185.49:80",
+        "timeout": 10,
+        "cache": {
+            "enabled": false,
+            "ttl": 1,
+            "ttl_units": "h", // "s", "m", "h"
+            "max_size": 100,
+            "size_units": "mb", // "mb", "gb", "kb"
+            "cache_object": {
+                "max_size": 10,
+                "size_units": "mb" // "mb", "gb", "kb"
+            },
+            "cached": [".js", ".css", ".png", ".gif", ".jpeg", ".jpg", ".json"],
+            "no_cached": ["favicon"]
+        },
+        "browser_cache": {
+            "ttl": 1,
+            "ttl_units": "h", // "s", "m", "h"
+            "enabled": true
+        }
+    }
+}

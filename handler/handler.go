@@ -2,79 +2,151 @@ package handler
 
 import (
 	"bufio"
-	"bytes"
 	"crypto/tls"
-	"io"
 	"io/ioutil"
 	"log"
+	"net"
 	"net/http"
 	"net/http/httputil"
-	"net/url"
-	"strings"
+	"strconv"
+	"time"
 
 	"github.com/artistomin/proxy/cache"
+	"github.com/artistomin/proxy/config"
 )
 
-var (
-	http200    = []byte("HTTP/1.1 200 Connection Established\r\n\r\n")
-	extensions = [...]string{".jpeg", ".jpg", ".js", ".png"}
-)
+const sizeValue = 1024
 
 type proxy struct {
-	client *http.Client
-	cache  cache.Cache
+	cache      *cache.Cache
+	domains    config.Domains
+	tlsEnabled bool
 }
 
 func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer func() {
 		if err := recover(); err != nil {
+			log.Printf("Panic: %v", err)
 			w.WriteHeader(http.StatusInternalServerError)
 		}
 	}()
 
-	if r.Method == http.MethodConnect {
-		p.handlerHTTPS(w, r)
-	} else if r.Method == http.MethodGet && filterAssets(r.URL.String()) {
-		p.handlerCache(w, r)
+	if p.tlsEnabled {
+		logRequest(r, "https")
 	} else {
-		p.handlerHTTP(w, r)
+		logRequest(r, "http")
+	}
+
+	hostCfg := p.domains[r.Host]
+	if r.Method == http.MethodGet {
+		p.handlerCache(w, r, hostCfg)
+	} else {
+		p.handler(w, r, hostCfg)
 	}
 }
 
-func (p *proxy) handlerCache(w http.ResponseWriter, r *http.Request) {
+func (p *proxy) handlerCache(w http.ResponseWriter, r *http.Request, hostCfg config.Domain) {
+	var res *http.Response
+	var body []byte
+	host := r.Host
+	url := r.URL.String()
+	cacheCfg := hostCfg.Cache
+	bCacheCfg := hostCfg.BrowserCache
 
-	uri := r.RequestURI
-	cached := p.cache.Has(uri)
+	if cacheCfg.Enabled && p.cache.Has(host, url) {
+		cachedValue := p.cache.Get(host, url)
 
-	if cached {
-		logRequest(r, "http")
+		body = cachedValue.Body
+		res = &http.Response{
+			Status:     cachedValue.Response.Status,
+			StatusCode: cachedValue.Response.StatusCode,
+			Proto:      cachedValue.Response.Proto,
+			ProtoMajor: cachedValue.Response.ProtoMajor,
+			ProtoMinor: cachedValue.Response.ProtoMinor,
+			Header:     cachedValue.Response.Header,
+		}
 
-		content := p.cache.Get(uri)
-		w.Write(content)
+		log.Printf("From cache: %s, Bytes: %d", url, len(body))
+	} else {
+		var conn net.Conn
+		var err error
 
-		log.Printf("Bytes: %d, Host: %s, URL: %s, Cached: %t", len(content), r.URL.Host, r.URL.String(), cached)
-		return
+		if p.tlsEnabled {
+			tlsCfg := generateCfg(r)
+			conn, err = p.httpsConn(r, hostCfg, tlsCfg)
+		} else {
+			conn, err = p.httpConn(r, hostCfg)
+		}
+
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		defer conn.Close()
+
+		res, err = p.Request(conn, r)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		defer res.Body.Close()
+
+		body, err = ioutil.ReadAll(res.Body)
+		if err != nil {
+			log.Printf("Body error: %v", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		if p.shouldResCached(host, r.URL.Path, len(body), cacheCfg) {
+			ttl := time.Duration(getTTL(cacheCfg.TTL, cacheCfg.TTLUnits))
+			expireTime := time.Now().UTC().Add(ttl)
+			response := cache.Response{
+				Status:     res.Status,
+				StatusCode: res.StatusCode,
+				Proto:      res.Proto,
+				ProtoMajor: res.ProtoMajor,
+				ProtoMinor: res.ProtoMinor,
+				Header:     res.Header,
+			}
+
+			p.cache.Put(host, url, response, body, expireTime)
+		}
 	}
 
-	res, err := p.client.Get(uri)
+	copyHeaders(w.Header(), res.Header)
+	w.Header().Del("Date")
+
+	if bCacheCfg.Enabled {
+		ttl := getTTL(bCacheCfg.TTL, bCacheCfg.TTLUnits)
+		ttlStr := strconv.Itoa(ttl)
+
+		w.Header().Set("Cache-Control", "public, max-age="+ttlStr)
+	} else {
+		w.Header().Del("Cache-control")
+	}
+
+	w.Write(body)
+}
+
+func (p *proxy) handler(w http.ResponseWriter, r *http.Request, hostCfg config.Domain) {
+	var conn net.Conn
+	var err error
+
+	if p.tlsEnabled {
+		tlsCfg := generateCfg(r)
+		conn, err = p.httpsConn(r, hostCfg, tlsCfg)
+	} else {
+		conn, err = p.httpConn(r, hostCfg)
+	}
 
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	defer res.Body.Close()
+	defer conn.Close()
 
-	w.WriteHeader(res.StatusCode)
-
-	body, err := ioutil.ReadAll(res.Body)
-
-	p.cache.Put(uri, body)
-	w.Write(body)
-}
-
-func (p *proxy) handlerHTTP(w http.ResponseWriter, r *http.Request) {
-	rmProxyHeaders(r)
-	res, err := p.client.Do(r)
+	res, err := p.Request(conn, r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -82,138 +154,87 @@ func (p *proxy) handlerHTTP(w http.ResponseWriter, r *http.Request) {
 	defer res.Body.Close()
 
 	copyHeaders(w.Header(), res.Header)
-	w.WriteHeader(res.StatusCode)
 
-	_, err = io.Copy(w, res.Body)
-	if err != nil && err != io.EOF {
-		log.Printf("occur an error when copying remote response to this client, %v", err)
-		return
-	}
-}
-
-func (p *proxy) handlerHTTPS(w http.ResponseWriter, r *http.Request) {
-	config := generateCfg(r)
-
-	hj, _ := w.(http.Hijacker)
-	hjClient, _, err := hj.Hijack()
-
+	body, err := ioutil.ReadAll(res.Body)
 	if err != nil {
-		log.Printf("http user failed to get tcp connection")
-		http.Error(w, "Failed", http.StatusBadRequest)
+		log.Printf("Body error: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	hjClient.Write(http200)
-
-	go func() {
-		defer hjClient.Close()
-		tlsCon := tls.Server(hjClient, config)
-		clientTLSReader := bufio.NewReader(tlsCon)
-		clientTLSWriter := bufio.NewWriter(tlsCon)
-
-		for !isEOF(clientTLSReader) {
-			req, err := http.ReadRequest(clientTLSReader)
-
-			if err != nil && err != io.EOF {
-				log.Printf("Read Request Error: %+#v", err.Error())
-				return
-			}
-
-			if err != nil {
-				log.Printf("cannot read request of MITM HTTP client: %+#v", err.Error())
-				return
-			}
-
-			req.RequestURI = ""
-			req.URL = buildHTTPSUrl(req)
-
-			cached := p.cache.Has(req.URL.String())
-			var res *http.Response
-
-			if cached && req.Method == http.MethodGet {
-				logRequest(req, "https")
-				cachedRes := p.cache.Get(req.URL.String())
-				bytesReader := bytes.NewReader(cachedRes)
-				bufioReader := bufio.NewReader(bytesReader)
-				res, err = http.ReadResponse(bufioReader, req)
-
-				if err != nil {
-					log.Printf("Read Response error: %v\n", err.Error())
-					return
-				}
-
-				log.Printf("Bytes: %d, Host: %s, URL: %s, Cached: %t", len(cachedRes), req.URL.Host, req.URL.String(), cached)
-			} else {
-				resp, err := p.client.Transport.RoundTrip(req)
-				if err != nil {
-					log.Printf("HTTPS client error: %v\n", err.Error())
-					return
-				}
-
-				res = resp
-
-				if filterAssets(req.URL.String()) && req.Method == http.MethodGet {
-					dumpRes, err := httputil.DumpResponse(res, true)
-
-					if err != nil {
-						log.Printf("Dump Response error: %v\n", err.Error())
-						return
-					}
-
-					p.cache.Put(req.URL.String(), dumpRes)
-				}
-
-			}
-
-			err = res.Write(clientTLSWriter)
-			if err != nil {
-				log.Printf("RES write error: %v\n", err.Error())
-				return
-			}
-
-			err = clientTLSWriter.Flush()
-			if err != nil {
-				log.Printf("FLUSH error: %v\n", err.Error())
-				return
-			}
-		}
-	}()
+	w.Write(body)
 }
 
-func buildHTTPSUrl(r *http.Request) *url.URL {
-	url, err := url.Parse("https://" + r.Host + r.URL.String())
+func (p *proxy) Request(conn net.Conn, r *http.Request) (*http.Response, error) {
+	rmProxyHeaders(r)
+
+	dumpReq, err := httputil.DumpRequest(r, true)
 	if err != nil {
-		log.Printf("Build URL error: %v\n", err.Error())
-	}
-	return url
-}
-
-func logRequest(r *http.Request, proto string) {
-	log.Printf("Method: %s, Proto: %s, Host:%s, Url: %s\n", r.Method, proto, r.Host, r.URL.String())
-}
-
-func isEOF(r *bufio.Reader) bool {
-	_, err := r.Peek(1)
-	if err == io.EOF {
-		return true
-	}
-	return false
-}
-
-func filterAssets(URL string) bool {
-	for _, extension := range extensions {
-		if strings.Contains(URL, extension) {
-			return true
-		}
+		log.Printf("TCP error: %v\n", err.Error())
+		return nil, err
 	}
 
-	return false
+	_, err = conn.Write(dumpReq)
+	if err != nil {
+		log.Printf("TCP error: %v\n", err.Error())
+		return nil, err
+	}
+
+	resReader := bufio.NewReader(conn)
+	if err != nil {
+		log.Printf("TCP error: %v\n", err.Error())
+		return nil, err
+	}
+
+	res, err := http.ReadResponse(resReader, r)
+	if err != nil {
+		log.Printf("TCP error: %v\n", err.Error())
+		return nil, err
+	}
+
+	return res, nil
+}
+
+func (p *proxy) shouldResCached(host, path string, bodySize int, cacheCfg config.Cache) bool {
+	if !cacheCfg.Enabled {
+		return false
+	}
+
+	if (p.cache.Size(host) + bodySize) >= maxSizeBytes(cacheCfg.MaxSize, cacheCfg.SizeUnits) {
+		return false
+	}
+
+	if bodySize > maxSizeBytes(cacheCfg.CacheObject.MaxSize, cacheCfg.CacheObject.SizeUnits) {
+		return false
+	}
+
+	if len(cacheCfg.Cached) > 0 && !pathHasSuffix(path, cacheCfg.Cached) {
+		return false
+	}
+
+	if len(cacheCfg.NoCached) > 0 && pathContainsString(path, cacheCfg.NoCached) {
+		return false
+	}
+
+	return true
 }
 
 // New creates new proxy server
-func New(client *http.Client, cache cache.Cache, port string) *http.Server {
-	return &http.Server{
-		Addr:    port,
-		Handler: &proxy{client, cache},
+func New(domains config.Domains, cache *cache.Cache, port string, tlsEnabled bool) *http.Server {
+	var server *http.Server
+
+	if tlsEnabled {
+		server = &http.Server{
+			Addr:         port,
+			Handler:      &proxy{cache, domains, tlsEnabled},
+			TLSNextProto: make(map[string]func(*http.Server, *tls.Conn, http.Handler), 0),
+		}
+	} else {
+		server = &http.Server{
+			Addr:    port,
+			Handler: &proxy{cache, domains, tlsEnabled},
+		}
 	}
+
+	return server
 }
