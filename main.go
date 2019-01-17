@@ -10,7 +10,6 @@ import (
 )
 
 var (
-	port    = flag.String("port", ":3000", "Port")
 	cfgPath = flag.String("cfg-path", "config.json", "Path to config file")
 )
 
