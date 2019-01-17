@@ -45,4 +45,12 @@
 # Ignore all local history of files
 .history
 
+### Certs ###
+certs/*
+!certs/myCA.cer
+!certs/myCA.key
+
+### Config File ###
+config.json
+
 # End of https://www.gitignore.io/api/go,git,visualstudiocode
