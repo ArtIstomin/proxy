@@ -3,7 +3,6 @@ package handler
 import (
 	"bufio"
 	"crypto/tls"
-	"fmt"
 	"io/ioutil"
 	"log"
 	"net"
@@ -25,7 +24,6 @@ type proxy struct {
 }
 
 func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("HERE")
 	defer func() {
 		if err := recover(); err != nil {
 			log.Printf("Panic: %v", err)

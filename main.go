@@ -1,7 +1,6 @@
 package main
 
 import (
-	"crypto/tls"
 	"flag"
 	"log"
 
@@ -11,12 +10,7 @@ import (
 )
 
 var (
-<<<<<<< HEAD
-	targets = flag.String("targets", "tut.by,mail.ru", "add some sites")
-=======
-	port    = flag.String("port", ":3000", "Port")
 	cfgPath = flag.String("cfg-path", "config.json", "Path to config file")
->>>>>>> master
 )
 
 type proxyCfg struct {
