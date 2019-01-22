@@ -7,7 +7,8 @@ import (
 	"time"
 )
 
-func getTTL(ttl time.Duration, units string) int {
+// GetTTL converts ttl to seconds
+func (p *Proxy) GetTTL(ttl time.Duration, units string) int {
 	var ttlDuration time.Duration
 
 	switch units {
@@ -20,6 +21,12 @@ func getTTL(ttl time.Duration, units string) int {
 	}
 
 	return int(ttlDuration.Seconds())
+}
+
+// LogRequest logging request
+func (p *Proxy) LogRequest(r *http.Request, scheme string) {
+	log.Printf("Scheme: %s, Method: %s, Host: %s, Url: %s\n", scheme, r.Method, r.Host,
+		r.URL.String())
 }
 
 func maxSizeBytes(size int, units string) int {
@@ -56,9 +63,4 @@ func pathContainsString(path string, subStrings []string) bool {
 	}
 
 	return false
-}
-
-func logRequest(r *http.Request, scheme string) {
-	log.Printf("Scheme: %s, Method: %s, Host: %s, Url: %s\n", scheme, r.Method, r.Host,
-		r.URL.String())
 }
