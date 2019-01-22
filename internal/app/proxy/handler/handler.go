@@ -11,22 +11,23 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/artistomin/proxy/cache"
-	"github.com/artistomin/proxy/config"
+	"github.com/artistomin/proxy/internal/app/proxy/cache"
+	"github.com/artistomin/proxy/internal/app/proxy/certificate"
+	"github.com/artistomin/proxy/internal/app/proxy/config"
 )
 
 const sizeValue = 1024
 
-type proxy struct {
-	cache      *cache.Cache
+type Proxy struct {
+	cache      cache.Cacher
 	domains    config.Domains
 	tlsEnabled bool
 }
 
-func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer func() {
 		if err := recover(); err != nil {
-			log.Printf("Panic: %v", err)
+			log.Printf("panic: %s", err)
 			w.WriteHeader(http.StatusInternalServerError)
 		}
 	}()
@@ -45,7 +46,7 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (p *proxy) handlerCache(w http.ResponseWriter, r *http.Request, hostCfg config.Domain) {
+func (p *Proxy) handlerCache(w http.ResponseWriter, r *http.Request, hostCfg config.Domain) {
 	var res *http.Response
 	var body []byte
 	host := r.Host
@@ -53,7 +54,8 @@ func (p *proxy) handlerCache(w http.ResponseWriter, r *http.Request, hostCfg con
 	cacheCfg := hostCfg.Cache
 	bCacheCfg := hostCfg.BrowserCache
 
-	if cacheCfg.Enabled && p.cache.Has(host, url) {
+	switch {
+	case cacheCfg.Enabled && p.cache.Has(host, url):
 		cachedValue := p.cache.Get(host, url)
 
 		body = cachedValue.Body
@@ -67,12 +69,12 @@ func (p *proxy) handlerCache(w http.ResponseWriter, r *http.Request, hostCfg con
 		}
 
 		log.Printf("From cache: %s, Bytes: %d", url, len(body))
-	} else {
+	default:
 		var conn net.Conn
 		var err error
 
 		if p.tlsEnabled {
-			tlsCfg := generateCfg(r)
+			tlsCfg := certificate.Generate(r)
 			conn, err = p.httpsConn(r, hostCfg, tlsCfg)
 		} else {
 			conn, err = p.httpConn(r, hostCfg)
@@ -86,6 +88,7 @@ func (p *proxy) handlerCache(w http.ResponseWriter, r *http.Request, hostCfg con
 
 		res, err = p.Request(conn, r)
 		if err != nil {
+			log.Printf("request error: %s", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -93,7 +96,7 @@ func (p *proxy) handlerCache(w http.ResponseWriter, r *http.Request, hostCfg con
 
 		body, err = ioutil.ReadAll(res.Body)
 		if err != nil {
-			log.Printf("Body error: %v", err)
+			log.Printf("body error: %s", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -123,24 +126,25 @@ func (p *proxy) handlerCache(w http.ResponseWriter, r *http.Request, hostCfg con
 
 		w.Header().Set("Cache-Control", "public, max-age="+ttlStr)
 	} else {
-		w.Header().Del("Cache-control")
+		w.Header().Del("Cache-Control")
 	}
 
 	w.Write(body)
 }
 
-func (p *proxy) handler(w http.ResponseWriter, r *http.Request, hostCfg config.Domain) {
+func (p *Proxy) handler(w http.ResponseWriter, r *http.Request, hostCfg config.Domain) {
 	var conn net.Conn
 	var err error
 
 	if p.tlsEnabled {
-		tlsCfg := generateCfg(r)
+		tlsCfg := certificate.Generate(r)
 		conn, err = p.httpsConn(r, hostCfg, tlsCfg)
 	} else {
 		conn, err = p.httpConn(r, hostCfg)
 	}
 
 	if err != nil {
+		log.Printf("Request error: %s", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -148,6 +152,7 @@ func (p *proxy) handler(w http.ResponseWriter, r *http.Request, hostCfg config.D
 
 	res, err := p.Request(conn, r)
 	if err != nil {
+		log.Printf("Body error: %s", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -157,7 +162,7 @@ func (p *proxy) handler(w http.ResponseWriter, r *http.Request, hostCfg config.D
 
 	body, err := ioutil.ReadAll(res.Body)
 	if err != nil {
-		log.Printf("Body error: %v", err)
+		log.Printf("Body error: %s", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -165,37 +170,35 @@ func (p *proxy) handler(w http.ResponseWriter, r *http.Request, hostCfg config.D
 	w.Write(body)
 }
 
-func (p *proxy) Request(conn net.Conn, r *http.Request) (*http.Response, error) {
+// generic
+func (p *Proxy) Request(conn net.Conn, r *http.Request) (*http.Response, error) {
 	rmProxyHeaders(r)
 
 	dumpReq, err := httputil.DumpRequest(r, true)
 	if err != nil {
-		log.Printf("TCP error: %v\n", err.Error())
 		return nil, err
 	}
 
 	_, err = conn.Write(dumpReq)
 	if err != nil {
-		log.Printf("TCP error: %v\n", err.Error())
 		return nil, err
 	}
 
 	resReader := bufio.NewReader(conn)
 	if err != nil {
-		log.Printf("TCP error: %v\n", err.Error())
 		return nil, err
 	}
 
 	res, err := http.ReadResponse(resReader, r)
 	if err != nil {
-		log.Printf("TCP error: %v\n", err.Error())
 		return nil, err
 	}
 
 	return res, nil
 }
 
-func (p *proxy) shouldResCached(host, path string, bodySize int, cacheCfg config.Cache) bool {
+// generic
+func (p *Proxy) shouldResCached(host, path string, bodySize int, cacheCfg config.Cache) bool {
 	if !cacheCfg.Enabled {
 		return false
 	}
@@ -220,19 +223,19 @@ func (p *proxy) shouldResCached(host, path string, bodySize int, cacheCfg config
 }
 
 // New creates new proxy server
-func New(domains config.Domains, cache *cache.Cache, port string, tlsEnabled bool) *http.Server {
+func New(domains config.Domains, cache cache.Cacher, port string, tlsEnabled bool) *http.Server {
 	var server *http.Server
 
 	if tlsEnabled {
 		server = &http.Server{
 			Addr:         port,
-			Handler:      &proxy{cache, domains, tlsEnabled},
+			Handler:      &Proxy{cache, domains, tlsEnabled},
 			TLSNextProto: make(map[string]func(*http.Server, *tls.Conn, http.Handler), 0),
 		}
 	} else {
 		server = &http.Server{
 			Addr:    port,
-			Handler: &proxy{cache, domains, tlsEnabled},
+			Handler: &Proxy{cache, domains, tlsEnabled},
 		}
 	}
 
