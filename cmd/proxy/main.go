@@ -4,13 +4,13 @@ import (
 	"flag"
 	"log"
 
-	"github.com/artistomin/proxy/cache"
-	"github.com/artistomin/proxy/config"
-	"github.com/artistomin/proxy/handler"
+	"github.com/artistomin/proxy/internal/app/proxy/cache"
+	"github.com/artistomin/proxy/internal/app/proxy/config"
+	"github.com/artistomin/proxy/internal/app/proxy/handler"
 )
 
 var (
-	cfgPath = flag.String("cfg-path", "config.json", "Path to config file")
+	cfgPath = flag.String("cfg-path", "configs/config.json", "Path to config file")
 )
 
 type proxyCfg struct {

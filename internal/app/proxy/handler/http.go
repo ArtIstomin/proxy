@@ -6,10 +6,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/artistomin/proxy/config"
+	"github.com/artistomin/proxy/internal/app/proxy/config"
 )
 
-func (p *proxy) httpConn(r *http.Request, hostCfg config.Domain) (net.Conn, error) {
+func (p *Proxy) httpConn(r *http.Request, hostCfg config.Domain) (net.Conn, error) {
 	ip := hostCfg.IP
 	timeout := time.Duration(hostCfg.Timeout) * time.Second
 

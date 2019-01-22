@@ -9,18 +9,20 @@ import (
 
 // Cacher is the interface that provides cache methods
 type Cacher interface {
-	Get(host, url string) []byte
-	Put(host, url string, content []byte)
+	Get(host, url string) value
+	Put(host, url string, response Response, body []byte, expires time.Time)
 	Has(host, key string) bool
 	Size(host string) int
 }
 
-type Cache struct {
-	values map[string]map[string]Value
-	mutex  *sync.Mutex
+type cache struct {
+	values
+	*sync.Mutex
 }
 
-type Value struct {
+type values map[string]map[string]value
+
+type value struct {
 	Response Response
 	Body     []byte
 	expires  time.Time
@@ -35,27 +37,27 @@ type Response struct {
 	Header     http.Header
 }
 
-func (c *Cache) Get(host, url string) Value {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
+func (c *cache) Get(host, url string) value {
+	c.Lock()
+	defer c.Unlock()
 
 	return c.values[host][url]
 }
 
-func (c *Cache) Put(host, url string, response Response, body []byte, expires time.Time) {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
+func (c *cache) Put(host, url string, response Response, body []byte, expires time.Time) {
+	c.Lock()
+	defer c.Unlock()
 
-	value := Value{response, body, expires}
+	v := value{response, body, expires}
 
 	if _, exists := c.values[host]; !exists {
-		c.values[host] = map[string]Value{url: value}
+		c.values[host] = map[string]value{url: v}
 	} else {
-		c.values[host][url] = value
+		c.values[host][url] = v
 	}
 }
 
-func (c *Cache) Has(host, key string) bool {
+func (c *cache) Has(host, key string) bool {
 	obj, ok := c.values[host][key]
 	now := time.Now().UTC()
 
@@ -66,16 +68,16 @@ func (c *Cache) Has(host, key string) bool {
 	return ok
 }
 
-func (c *Cache) Size(host string) int {
+func (c *cache) Size(host string) int {
 	// TODO: implement another method to get size of host cache
 	// unsafe.Sizeof - anti-pattern
 	return int(unsafe.Sizeof(c.values[host]))
 }
 
 // New creates new instance of cache.
-func New() *Cache {
-	return &Cache{
-		values: make(map[string]map[string]Value),
-		mutex:  &sync.Mutex{},
+func New() Cacher {
+	return &cache{
+		make(map[string]map[string]value),
+		&sync.Mutex{},
 	}
 }

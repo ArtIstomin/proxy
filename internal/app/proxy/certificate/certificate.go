@@ -1,4 +1,4 @@
-package handler
+package certificate
 
 import (
 	"crypto/rand"
@@ -26,7 +26,8 @@ const (
 
 var mu sync.Mutex
 
-func generateCfg(r *http.Request) *tls.Config {
+// Generate creates self-signed certificate for provided hostname
+func Generate(r *http.Request) *tls.Config {
 	hostname := strings.Split(r.Host, ":")[0]
 	certFile, keyFile := getCertPath(hostname)
 
