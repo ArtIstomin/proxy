@@ -3,7 +3,7 @@ package handler
 import "net/http"
 
 // CopyHeaders copies headers from source to destination
-func (p *Proxy) CopyHeaders(dst, src http.Header) {
+func (h *Handler) CopyHeaders(dst, src http.Header) {
 	for key, values := range src {
 		for _, value := range values {
 			dst.Add(key, value)

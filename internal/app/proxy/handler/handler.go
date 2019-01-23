@@ -12,14 +12,14 @@ import (
 
 const sizeValue = 1024
 
-// Proxy common structure for proxy servers
-type Proxy struct {
+// Handler common structure for handler
+type Handler struct {
 	Cache   cache.Cacher
 	Domains config.Domains
 }
 
 // Request performs request to destination server
-func (p *Proxy) Request(conn net.Conn, r *http.Request) (*http.Response, error) {
+func (h *Handler) Request(conn net.Conn, r *http.Request) (*http.Response, error) {
 	rmProxyHeaders(r)
 
 	dumpReq, err := httputil.DumpRequest(r, true)
@@ -46,12 +46,12 @@ func (p *Proxy) Request(conn net.Conn, r *http.Request) (*http.Response, error) 
 }
 
 // ShouldResCached checks should be response cached or not
-func (p *Proxy) ShouldResCached(host, path string, bodySize int, cacheCfg config.Cache) bool {
+func (h *Handler) ShouldResCached(host, path string, bodySize int, cacheCfg config.Cache) bool {
 	if !cacheCfg.Enabled {
 		return false
 	}
 
-	if (p.Cache.Size(host) + bodySize) >= maxSizeBytes(cacheCfg.MaxSize, cacheCfg.SizeUnits) {
+	if (h.Cache.Size(host) + bodySize) >= maxSizeBytes(cacheCfg.MaxSize, cacheCfg.SizeUnits) {
 		return false
 	}
 
