@@ -12,10 +12,16 @@ type Domains map[string]Domain
 
 // Domain represenets structure of each domain in the config
 type Domain struct {
-	IP           string       `json:"ip"`
-	Timeout      int          `json:"timeout"`
-	BrowserCache BrowserCache `json:"browser_cache"`
-	Cache        Cache        `json:"cache"`
+	Pool         `json:"pool"`
+	BrowserCache `json:"browser_cache"`
+	Cache        `json:"cache"`
+}
+
+type Pool struct {
+	IP      string `json:"ip"`
+	Timeout int    `json:"timeout"`
+	MaxConn int    `json:"max_connections"`
+	Secure  bool   `json:"secure"`
 }
 
 type Cache struct {

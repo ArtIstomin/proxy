@@ -10,6 +10,7 @@ import (
 
 	"github.com/artistomin/proxy/internal/app/proxy/cache"
 	"github.com/artistomin/proxy/internal/app/proxy/config"
+	"github.com/artistomin/proxy/internal/app/proxy/connpool"
 	"github.com/artistomin/proxy/internal/app/proxy/handler"
 )
 
@@ -59,7 +60,8 @@ func (hh *HttpHandler) handlerCache(w http.ResponseWriter, r *http.Request, host
 
 		log.Printf("From cache: %s, Bytes: %d", url, len(body))
 	default:
-		conn, err := hh.httpConn(r, hostCfg)
+		conn, err := hh.GetConn(r)
+		// conn, err := hh.httpConn(r, hostCfg)
 		if err != nil {
 			log.Printf("connection error: %s", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -155,6 +157,6 @@ func (hh *HttpHandler) httpConn(r *http.Request, hostCfg config.Domain) (net.Con
 }
 
 // New creates new http handler
-func New(domains config.Domains, cache cache.Cacher) *HttpHandler {
-	return &HttpHandler{handler.Handler{cache, domains}}
+func New(domains config.Domains, cache cache.Cacher, pool connpool.ConnPool) *HttpHandler {
+	return &HttpHandler{handler.Handler{cache, domains, pool}}
 }

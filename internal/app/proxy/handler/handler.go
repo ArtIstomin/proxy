@@ -2,12 +2,14 @@ package handler
 
 import (
 	"bufio"
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/httputil"
 
 	"github.com/artistomin/proxy/internal/app/proxy/cache"
 	"github.com/artistomin/proxy/internal/app/proxy/config"
+	"github.com/artistomin/proxy/internal/app/proxy/connpool"
 )
 
 const sizeValue = 1024
@@ -16,6 +18,13 @@ const sizeValue = 1024
 type Handler struct {
 	Cache   cache.Cacher
 	Domains config.Domains
+	Pool    connpool.ConnPool
+}
+
+func (h *Handler) GetConn(r *http.Request) (net.Conn, error) {
+	fmt.Println("////////////////")
+	fmt.Println(r.Host)
+	return h.Pool.Get(r.Host)
 }
 
 // Request performs request to destination server
