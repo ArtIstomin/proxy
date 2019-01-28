@@ -8,18 +8,31 @@ import (
 
 	"github.com/artistomin/proxy/internal/app/proxy/cache"
 	"github.com/artistomin/proxy/internal/app/proxy/config"
+	"github.com/artistomin/proxy/internal/app/proxy/connpool"
 )
 
 const sizeValue = 1024
 
-// Proxy common structure for proxy servers
-type Proxy struct {
+// Handler common structure for handler
+type Handler struct {
 	Cache   cache.Cacher
 	Domains config.Domains
+	Pool    connpool.ConnPool
+}
+
+func (h *Handler) GetConn(r *http.Request) (net.Conn, error) {
+	host := r.Host
+	ip := h.Domains[host].Pool.IP
+
+	return h.Pool.Get(host, ip)
+}
+
+func (h *Handler) ReturnConn(r *http.Request, conn net.Conn) error {
+	return h.Pool.Put(r.Host, conn)
 }
 
 // Request performs request to destination server
-func (p *Proxy) Request(conn net.Conn, r *http.Request) (*http.Response, error) {
+func (h *Handler) Request(conn net.Conn, r *http.Request) (*http.Response, error) {
 	rmProxyHeaders(r)
 
 	dumpReq, err := httputil.DumpRequest(r, true)
@@ -46,12 +59,12 @@ func (p *Proxy) Request(conn net.Conn, r *http.Request) (*http.Response, error) 
 }
 
 // ShouldResCached checks should be response cached or not
-func (p *Proxy) ShouldResCached(host, path string, bodySize int, cacheCfg config.Cache) bool {
+func (h *Handler) ShouldResCached(host, path string, bodySize int, cacheCfg config.Cache) bool {
 	if !cacheCfg.Enabled {
 		return false
 	}
 
-	if (p.Cache.Size(host) + bodySize) >= maxSizeBytes(cacheCfg.MaxSize, cacheCfg.SizeUnits) {
+	if (h.Cache.Size(host) + bodySize) >= maxSizeBytes(cacheCfg.MaxSize, cacheCfg.SizeUnits) {
 		return false
 	}
 

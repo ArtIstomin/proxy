@@ -1,25 +1,23 @@
 package handlerhttps
 
 import (
-	"crypto/tls"
 	"io/ioutil"
 	"log"
-	"net"
 	"net/http"
 	"strconv"
 	"time"
 
 	"github.com/artistomin/proxy/internal/app/proxy/cache"
-	"github.com/artistomin/proxy/internal/app/proxy/certificate"
 	"github.com/artistomin/proxy/internal/app/proxy/config"
+	"github.com/artistomin/proxy/internal/app/proxy/connpool"
 	"github.com/artistomin/proxy/internal/app/proxy/handler"
 )
 
-type httpsProxy struct {
-	handler.Proxy
+type HttpsHandler struct {
+	handler.Handler
 }
 
-func (hsp *httpsProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (hsh *HttpsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer func() {
 		if err := recover(); err != nil {
 			log.Printf("panic: %s", err)
@@ -27,17 +25,18 @@ func (hsp *httpsProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	hsp.LogRequest(r, "https")
+	hsh.LogRequest(r, "https")
 
-	hostCfg := hsp.Domains[r.Host]
+	hostCfg := hsh.Domains[r.Host]
 	if r.Method == http.MethodGet {
-		hsp.handlerCache(w, r, hostCfg)
+		hsh.handlerCache(w, r, hostCfg)
 	} else {
-		hsp.handler(w, r, hostCfg)
+		hsh.handler(w, r, hostCfg)
 	}
 }
 
-func (hsp *httpsProxy) handlerCache(w http.ResponseWriter, r *http.Request, hostCfg config.Domain) {
+func (hsh *HttpsHandler) handlerCache(w http.ResponseWriter, r *http.Request,
+	hostCfg config.Domain) {
 	var res *http.Response
 	var body []byte
 	host := r.Host
@@ -46,8 +45,8 @@ func (hsp *httpsProxy) handlerCache(w http.ResponseWriter, r *http.Request, host
 	bCacheCfg := hostCfg.BrowserCache
 
 	switch {
-	case cacheCfg.Enabled && hsp.Cache.Has(host, url):
-		cachedValue := hsp.Cache.Get(host, url)
+	case cacheCfg.Enabled && hsh.Cache.Has(host, url):
+		cachedValue := hsh.Cache.Get(host, url)
 
 		body = cachedValue.Body
 		res = &http.Response{
@@ -61,16 +60,15 @@ func (hsp *httpsProxy) handlerCache(w http.ResponseWriter, r *http.Request, host
 
 		log.Printf("From cache: %s, Bytes: %d", url, len(body))
 	default:
-		tlsCfg := certificate.Generate(r)
-		conn, err := hsp.httpsConn(r, hostCfg, tlsCfg)
+		conn, err := hsh.GetConn(r)
 		if err != nil {
 			log.Printf("connection error: %s", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		defer conn.Close()
+		defer hsh.ReturnConn(r, conn)
 
-		res, err = hsp.Request(conn, r)
+		res, err = hsh.Request(conn, r)
 		if err != nil {
 			log.Printf("request error: %s", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -85,8 +83,8 @@ func (hsp *httpsProxy) handlerCache(w http.ResponseWriter, r *http.Request, host
 			return
 		}
 
-		if hsp.ShouldResCached(host, r.URL.Path, len(body), cacheCfg) {
-			ttl := time.Duration(hsp.GetTTL(cacheCfg.TTL, cacheCfg.TTLUnits))
+		if hsh.ShouldResCached(host, r.URL.Path, len(body), cacheCfg) {
+			ttl := time.Duration(hsh.GetTTL(cacheCfg.TTL, cacheCfg.TTLUnits))
 			expireTime := time.Now().UTC().Add(ttl)
 			response := cache.Response{
 				Status:     res.Status,
@@ -97,15 +95,15 @@ func (hsp *httpsProxy) handlerCache(w http.ResponseWriter, r *http.Request, host
 				Header:     res.Header,
 			}
 
-			hsp.Cache.Put(host, url, response, body, expireTime)
+			hsh.Cache.Put(host, url, response, body, expireTime)
 		}
 	}
 
-	hsp.CopyHeaders(w.Header(), res.Header)
+	hsh.CopyHeaders(w.Header(), res.Header)
 	w.Header().Del("Date")
 
 	if bCacheCfg.Enabled {
-		ttl := hsp.GetTTL(bCacheCfg.TTL, bCacheCfg.TTLUnits)
+		ttl := hsh.GetTTL(bCacheCfg.TTL, bCacheCfg.TTLUnits)
 		ttlStr := strconv.Itoa(ttl)
 
 		w.Header().Set("Cache-Control", "public, max-age="+ttlStr)
@@ -116,17 +114,16 @@ func (hsp *httpsProxy) handlerCache(w http.ResponseWriter, r *http.Request, host
 	w.Write(body)
 }
 
-func (hsp *httpsProxy) handler(w http.ResponseWriter, r *http.Request, hostCfg config.Domain) {
-	tlsCfg := certificate.Generate(r)
-	conn, err := hsp.httpsConn(r, hostCfg, tlsCfg)
+func (hsh *HttpsHandler) handler(w http.ResponseWriter, r *http.Request, hostCfg config.Domain) {
+	conn, err := hsh.GetConn(r)
 	if err != nil {
 		log.Printf("connection error: %s", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	defer conn.Close()
+	defer hsh.ReturnConn(r, conn)
 
-	res, err := hsp.Request(conn, r)
+	res, err := hsh.Request(conn, r)
 	if err != nil {
 		log.Printf("request error: %s", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -134,7 +131,7 @@ func (hsp *httpsProxy) handler(w http.ResponseWriter, r *http.Request, hostCfg c
 	}
 	defer res.Body.Close()
 
-	hsp.CopyHeaders(w.Header(), res.Header)
+	hsh.CopyHeaders(w.Header(), res.Header)
 
 	body, err := ioutil.ReadAll(res.Body)
 	if err != nil {
@@ -146,27 +143,7 @@ func (hsp *httpsProxy) handler(w http.ResponseWriter, r *http.Request, hostCfg c
 	w.Write(body)
 }
 
-func (hsp *httpsProxy) httpsConn(r *http.Request, hostCfg config.Domain,
-	cfg *tls.Config) (net.Conn, error) {
-	ip := hostCfg.IP
-	timeout := time.Duration(hostCfg.Timeout) * time.Second
-	dialer := &net.Dialer{
-		Timeout: timeout,
-	}
-
-	conn, err := tls.DialWithDialer(dialer, "tcp", ip, cfg)
-	if err != nil {
-		return nil, err
-	}
-
-	return conn, nil
-}
-
-// New creates new https proxy server
-func New(domains config.Domains, cache cache.Cacher, port string) *http.Server {
-	return &http.Server{
-		Addr:         port,
-		Handler:      &httpsProxy{handler.Proxy{cache, domains}},
-		TLSNextProto: make(map[string]func(*http.Server, *tls.Conn, http.Handler), 0),
-	}
+// New creates new https handler
+func New(domains config.Domains, cache cache.Cacher, pool connpool.ConnPool) *HttpsHandler {
+	return &HttpsHandler{handler.Handler{cache, domains, pool}}
 }

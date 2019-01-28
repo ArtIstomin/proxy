@@ -8,7 +8,7 @@ import (
 )
 
 // GetTTL converts ttl to seconds
-func (p *Proxy) GetTTL(ttl time.Duration, units string) int {
+func (h *Handler) GetTTL(ttl time.Duration, units string) int {
 	var ttlDuration time.Duration
 
 	switch units {
@@ -24,7 +24,7 @@ func (p *Proxy) GetTTL(ttl time.Duration, units string) int {
 }
 
 // LogRequest logging request
-func (p *Proxy) LogRequest(r *http.Request, scheme string) {
+func (h *Handler) LogRequest(r *http.Request, scheme string) {
 	log.Printf("Scheme: %s, Method: %s, Host: %s, Url: %s\n", scheme, r.Method, r.Host,
 		r.URL.String())
 }
