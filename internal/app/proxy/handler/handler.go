@@ -2,7 +2,6 @@ package handler
 
 import (
 	"bufio"
-	"fmt"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -22,9 +21,14 @@ type Handler struct {
 }
 
 func (h *Handler) GetConn(r *http.Request) (net.Conn, error) {
-	fmt.Println("////////////////")
-	fmt.Println(r.Host)
-	return h.Pool.Get(r.Host)
+	host := r.Host
+	ip := h.Domains[host].Pool.IP
+
+	return h.Pool.Get(host, ip)
+}
+
+func (h *Handler) ReturnConn(r *http.Request, conn net.Conn) error {
+	return h.Pool.Put(r.Host, conn)
 }
 
 // Request performs request to destination server

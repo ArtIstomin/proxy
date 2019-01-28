@@ -3,7 +3,6 @@ package main
 import (
 	"crypto/tls"
 	"flag"
-	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -33,7 +32,6 @@ func main() {
 
 	storage := inmemoryCache.New()
 	pool := initPool(domainsCfg)
-	fmt.Println(pool)
 	handlerHTTP := handlerhttp.New(domainsCfg, storage, pool)
 	handlerHTTPS := handlerhttps.New(domainsCfg, storage, pool)
 
@@ -58,16 +56,14 @@ func main() {
 	log.Fatal(httpsProxy.ListenAndServeTLS("certs/myCA.cer", "certs/myCA.key"))
 }
 
-func initPool(domains config.Domains) connpool.Pool {
+func initPool(domains config.Domains) *connpool.Pool {
 	pool := connpool.New()
 
 	for host, cfg := range domains {
-		fmt.Println(host)
 		var connFunc connpool.ConnFunc
 		if cfg.Pool.Secure {
-			connFunc = func() (net.Conn, error) {
+			connFunc = func(ip string) (net.Conn, error) {
 				tlsCfg := certificate.Generate(host)
-				ip := cfg.IP
 				timeout := time.Duration(cfg.Timeout) * time.Second
 				dialer := &net.Dialer{
 					Timeout: timeout,
@@ -81,8 +77,7 @@ func initPool(domains config.Domains) connpool.Pool {
 				return conn, nil
 			}
 		} else {
-			connFunc = func() (net.Conn, error) {
-				ip := cfg.IP
+			connFunc = func(ip string) (net.Conn, error) {
 				timeout := time.Duration(cfg.Timeout) * time.Second
 
 				conn, err := net.DialTimeout("tcp", ip, timeout)

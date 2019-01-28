@@ -3,7 +3,6 @@ package handlerhttp
 import (
 	"io/ioutil"
 	"log"
-	"net"
 	"net/http"
 	"strconv"
 	"time"
@@ -61,13 +60,12 @@ func (hh *HttpHandler) handlerCache(w http.ResponseWriter, r *http.Request, host
 		log.Printf("From cache: %s, Bytes: %d", url, len(body))
 	default:
 		conn, err := hh.GetConn(r)
-		// conn, err := hh.httpConn(r, hostCfg)
 		if err != nil {
 			log.Printf("connection error: %s", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		defer conn.Close()
+		defer hh.ReturnConn(r, conn)
 
 		res, err = hh.Request(conn, r)
 		if err != nil {
@@ -116,13 +114,13 @@ func (hh *HttpHandler) handlerCache(w http.ResponseWriter, r *http.Request, host
 }
 
 func (hh *HttpHandler) handler(w http.ResponseWriter, r *http.Request, hostCfg config.Domain) {
-	conn, err := hh.httpConn(r, hostCfg)
+	conn, err := hh.GetConn(r)
 	if err != nil {
 		log.Printf("connection error: %s", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	defer conn.Close()
+	defer hh.ReturnConn(r, conn)
 
 	res, err := hh.Request(conn, r)
 	if err != nil {
@@ -142,18 +140,6 @@ func (hh *HttpHandler) handler(w http.ResponseWriter, r *http.Request, hostCfg c
 	}
 
 	w.Write(body)
-}
-
-func (hh *HttpHandler) httpConn(r *http.Request, hostCfg config.Domain) (net.Conn, error) {
-	ip := hostCfg.IP
-	timeout := time.Duration(hostCfg.Timeout) * time.Second
-
-	conn, err := net.DialTimeout("tcp", ip, timeout)
-	if err != nil {
-		return nil, err
-	}
-
-	return conn, nil
 }
 
 // New creates new http handler
