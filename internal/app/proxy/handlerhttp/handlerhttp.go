@@ -3,21 +3,21 @@ package handlerhttp
 import (
 	"io/ioutil"
 	"log"
-	"net"
 	"net/http"
 	"strconv"
 	"time"
 
 	"github.com/artistomin/proxy/internal/app/proxy/cache"
 	"github.com/artistomin/proxy/internal/app/proxy/config"
+	"github.com/artistomin/proxy/internal/app/proxy/connpool"
 	"github.com/artistomin/proxy/internal/app/proxy/handler"
 )
 
-type httpProxy struct {
-	handler.Proxy
+type HttpHandler struct {
+	handler.Handler
 }
 
-func (hp *httpProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (hh *HttpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer func() {
 		if err := recover(); err != nil {
 			log.Printf("panic: %s", err)
@@ -25,17 +25,17 @@ func (hp *httpProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	hp.LogRequest(r, "http")
+	hh.LogRequest(r, "http")
 
-	hostCfg := hp.Domains[r.Host]
+	hostCfg := hh.Domains[r.Host]
 	if r.Method == http.MethodGet {
-		hp.handlerCache(w, r, hostCfg)
+		hh.handlerCache(w, r, hostCfg)
 	} else {
-		hp.handler(w, r, hostCfg)
+		hh.handler(w, r, hostCfg)
 	}
 }
 
-func (hp *httpProxy) handlerCache(w http.ResponseWriter, r *http.Request, hostCfg config.Domain) {
+func (hh *HttpHandler) handlerCache(w http.ResponseWriter, r *http.Request, hostCfg config.Domain) {
 	var res *http.Response
 	var body []byte
 	host := r.Host
@@ -44,8 +44,8 @@ func (hp *httpProxy) handlerCache(w http.ResponseWriter, r *http.Request, hostCf
 	bCacheCfg := hostCfg.BrowserCache
 
 	switch {
-	case cacheCfg.Enabled && hp.Cache.Has(host, url):
-		cachedValue := hp.Cache.Get(host, url)
+	case cacheCfg.Enabled && hh.Cache.Has(host, url):
+		cachedValue := hh.Cache.Get(host, url)
 
 		body = cachedValue.Body
 		res = &http.Response{
@@ -59,15 +59,15 @@ func (hp *httpProxy) handlerCache(w http.ResponseWriter, r *http.Request, hostCf
 
 		log.Printf("From cache: %s, Bytes: %d", url, len(body))
 	default:
-		conn, err := hp.httpConn(r, hostCfg)
+		conn, err := hh.GetConn(r)
 		if err != nil {
 			log.Printf("connection error: %s", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		defer conn.Close()
+		defer hh.ReturnConn(r, conn)
 
-		res, err = hp.Request(conn, r)
+		res, err = hh.Request(conn, r)
 		if err != nil {
 			log.Printf("request error: %s", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -82,8 +82,8 @@ func (hp *httpProxy) handlerCache(w http.ResponseWriter, r *http.Request, hostCf
 			return
 		}
 
-		if hp.ShouldResCached(host, r.URL.Path, len(body), cacheCfg) {
-			ttl := time.Duration(hp.GetTTL(cacheCfg.TTL, cacheCfg.TTLUnits))
+		if hh.ShouldResCached(host, r.URL.Path, len(body), cacheCfg) {
+			ttl := time.Duration(hh.GetTTL(cacheCfg.TTL, cacheCfg.TTLUnits))
 			expireTime := time.Now().UTC().Add(ttl)
 			response := cache.Response{
 				Status:     res.Status,
@@ -94,15 +94,15 @@ func (hp *httpProxy) handlerCache(w http.ResponseWriter, r *http.Request, hostCf
 				Header:     res.Header,
 			}
 
-			hp.Cache.Put(host, url, response, body, expireTime)
+			hh.Cache.Put(host, url, response, body, expireTime)
 		}
 	}
 
-	hp.CopyHeaders(w.Header(), res.Header)
+	hh.CopyHeaders(w.Header(), res.Header)
 	w.Header().Del("Date")
 
 	if bCacheCfg.Enabled {
-		ttl := hp.GetTTL(bCacheCfg.TTL, bCacheCfg.TTLUnits)
+		ttl := hh.GetTTL(bCacheCfg.TTL, bCacheCfg.TTLUnits)
 		ttlStr := strconv.Itoa(ttl)
 
 		w.Header().Set("Cache-Control", "public, max-age="+ttlStr)
@@ -113,16 +113,16 @@ func (hp *httpProxy) handlerCache(w http.ResponseWriter, r *http.Request, hostCf
 	w.Write(body)
 }
 
-func (hp *httpProxy) handler(w http.ResponseWriter, r *http.Request, hostCfg config.Domain) {
-	conn, err := hp.httpConn(r, hostCfg)
+func (hh *HttpHandler) handler(w http.ResponseWriter, r *http.Request, hostCfg config.Domain) {
+	conn, err := hh.GetConn(r)
 	if err != nil {
 		log.Printf("connection error: %s", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	defer conn.Close()
+	defer hh.ReturnConn(r, conn)
 
-	res, err := hp.Request(conn, r)
+	res, err := hh.Request(conn, r)
 	if err != nil {
 		log.Printf("request error: %s", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -130,7 +130,7 @@ func (hp *httpProxy) handler(w http.ResponseWriter, r *http.Request, hostCfg con
 	}
 	defer res.Body.Close()
 
-	hp.CopyHeaders(w.Header(), res.Header)
+	hh.CopyHeaders(w.Header(), res.Header)
 
 	body, err := ioutil.ReadAll(res.Body)
 	if err != nil {
@@ -142,22 +142,7 @@ func (hp *httpProxy) handler(w http.ResponseWriter, r *http.Request, hostCfg con
 	w.Write(body)
 }
 
-func (hp *httpProxy) httpConn(r *http.Request, hostCfg config.Domain) (net.Conn, error) {
-	ip := hostCfg.IP
-	timeout := time.Duration(hostCfg.Timeout) * time.Second
-
-	conn, err := net.DialTimeout("tcp", ip, timeout)
-	if err != nil {
-		return nil, err
-	}
-
-	return conn, nil
-}
-
-// New creates new http proxy server
-func New(domains config.Domains, cache cache.Cacher, port string) *http.Server {
-	return &http.Server{
-		Addr:    port,
-		Handler: &httpProxy{handler.Proxy{cache, domains}},
-	}
+// New creates new http handler
+func New(domains config.Domains, cache cache.Cacher, pool connpool.ConnPool) *HttpHandler {
+	return &HttpHandler{handler.Handler{cache, domains, pool}}
 }
