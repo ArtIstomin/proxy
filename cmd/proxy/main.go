@@ -4,9 +4,13 @@ import (
 	"crypto/tls"
 	"flag"
 	"log"
+	"net"
 	"net/http"
+	"time"
 
+	"github.com/artistomin/proxy/internal/app/proxy/certificate"
 	"github.com/artistomin/proxy/internal/app/proxy/config"
+	"github.com/artistomin/proxy/internal/app/proxy/connpool"
 	"github.com/artistomin/proxy/internal/app/proxy/handlerhttp"
 	"github.com/artistomin/proxy/internal/app/proxy/handlerhttps"
 	inmemoryCache "github.com/artistomin/proxy/internal/app/proxy/inmemory"
@@ -27,8 +31,9 @@ func main() {
 	}
 
 	storage := inmemoryCache.New()
-	handlerHTTP := handlerhttp.New(domainsCfg, storage)
-	handlerHTTPS := handlerhttps.New(domainsCfg, storage)
+	pool := initPool(domainsCfg)
+	handlerHTTP := handlerhttp.New(domainsCfg, storage, pool)
+	handlerHTTPS := handlerhttps.New(domainsCfg, storage, pool)
 
 	httpProxy := &http.Server{
 		Addr:    *httpPort,
@@ -49,4 +54,43 @@ func main() {
 	}()
 
 	log.Fatal(httpsProxy.ListenAndServeTLS("certs/myCA.cer", "certs/myCA.key"))
+}
+
+func initPool(domains config.Domains) *connpool.Pool {
+	pool := connpool.New()
+
+	for host, cfg := range domains {
+		var connFunc connpool.ConnFunc
+		if cfg.Pool.Secure {
+			connFunc = func(ip string) (net.Conn, error) {
+				tlsCfg := certificate.Generate(host)
+				timeout := time.Duration(cfg.Timeout) * time.Second
+				dialer := &net.Dialer{
+					Timeout: timeout,
+				}
+
+				conn, err := tls.DialWithDialer(dialer, "tcp", ip, tlsCfg)
+				if err != nil {
+					return nil, err
+				}
+
+				return conn, nil
+			}
+		} else {
+			connFunc = func(ip string) (net.Conn, error) {
+				timeout := time.Duration(cfg.Timeout) * time.Second
+
+				conn, err := net.DialTimeout("tcp", ip, timeout)
+				if err != nil {
+					return nil, err
+				}
+
+				return conn, nil
+			}
+		}
+
+		pool.Init(host, connFunc, cfg.Pool)
+	}
+
+	return pool
 }

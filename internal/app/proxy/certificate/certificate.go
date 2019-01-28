@@ -11,10 +11,8 @@ import (
 	"math/big"
 	mrand "math/rand"
 	"net"
-	"net/http"
 	"os"
 	"path"
-	"strings"
 	"sync"
 	"time"
 )
@@ -27,8 +25,7 @@ const (
 var mu sync.Mutex
 
 // Generate creates self-signed certificate for provided hostname
-func Generate(r *http.Request) *tls.Config {
-	hostname := strings.Split(r.Host, ":")[0]
+func Generate(hostname string) *tls.Config {
 	certFile, keyFile := getCertPath(hostname)
 
 	if !pathExists(certFile) {

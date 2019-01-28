@@ -1,7 +1,12 @@
 {
     "www.un.org": {
-        "ip": "157.150.185.49:80",
-        "timeout": 10,
+        "pool": {
+            "secure": false,
+            "ip": "157.150.185.49:80",
+            "timeout": 10,
+            "max_connections": 2
+        },
+        
         "cache": {
             "enabled": true,
             "ttl": 1,
@@ -22,8 +27,12 @@
         }
     },
     "www.tut.by": {
-        "ip": "178.172.160.4:443",
-        "timeout": 10,
+        "pool": {
+            "secure": true,
+            "ip": "178.172.160.4:443",
+            "timeout": 10,
+            "max_connections": 10
+        },
         "cache": {
             "enabled": true,
             "ttl": 1,

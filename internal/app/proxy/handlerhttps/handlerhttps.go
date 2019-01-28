@@ -1,17 +1,15 @@
 package handlerhttps
 
 import (
-	"crypto/tls"
 	"io/ioutil"
 	"log"
-	"net"
 	"net/http"
 	"strconv"
 	"time"
 
 	"github.com/artistomin/proxy/internal/app/proxy/cache"
-	"github.com/artistomin/proxy/internal/app/proxy/certificate"
 	"github.com/artistomin/proxy/internal/app/proxy/config"
+	"github.com/artistomin/proxy/internal/app/proxy/connpool"
 	"github.com/artistomin/proxy/internal/app/proxy/handler"
 )
 
@@ -62,14 +60,13 @@ func (hsh *HttpsHandler) handlerCache(w http.ResponseWriter, r *http.Request,
 
 		log.Printf("From cache: %s, Bytes: %d", url, len(body))
 	default:
-		tlsCfg := certificate.Generate(r)
-		conn, err := hsh.httpsConn(r, hostCfg, tlsCfg)
+		conn, err := hsh.GetConn(r)
 		if err != nil {
 			log.Printf("connection error: %s", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		defer conn.Close()
+		defer hsh.ReturnConn(r, conn)
 
 		res, err = hsh.Request(conn, r)
 		if err != nil {
@@ -118,14 +115,13 @@ func (hsh *HttpsHandler) handlerCache(w http.ResponseWriter, r *http.Request,
 }
 
 func (hsh *HttpsHandler) handler(w http.ResponseWriter, r *http.Request, hostCfg config.Domain) {
-	tlsCfg := certificate.Generate(r)
-	conn, err := hsh.httpsConn(r, hostCfg, tlsCfg)
+	conn, err := hsh.GetConn(r)
 	if err != nil {
 		log.Printf("connection error: %s", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	defer conn.Close()
+	defer hsh.ReturnConn(r, conn)
 
 	res, err := hsh.Request(conn, r)
 	if err != nil {
@@ -147,23 +143,7 @@ func (hsh *HttpsHandler) handler(w http.ResponseWriter, r *http.Request, hostCfg
 	w.Write(body)
 }
 
-func (hsh *HttpsHandler) httpsConn(r *http.Request, hostCfg config.Domain,
-	cfg *tls.Config) (net.Conn, error) {
-	ip := hostCfg.IP
-	timeout := time.Duration(hostCfg.Timeout) * time.Second
-	dialer := &net.Dialer{
-		Timeout: timeout,
-	}
-
-	conn, err := tls.DialWithDialer(dialer, "tcp", ip, cfg)
-	if err != nil {
-		return nil, err
-	}
-
-	return conn, nil
-}
-
 // New creates new https handler
-func New(domains config.Domains, cache cache.Cacher) *HttpsHandler {
-	return &HttpsHandler{handler.Handler{cache, domains}}
+func New(domains config.Domains, cache cache.Cacher, pool connpool.ConnPool) *HttpsHandler {
+	return &HttpsHandler{handler.Handler{cache, domains, pool}}
 }
