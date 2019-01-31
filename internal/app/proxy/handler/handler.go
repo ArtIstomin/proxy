@@ -1,39 +1,21 @@
 package handler
 
 import (
-	"bufio"
-	"net"
-	"net/http"
-	"net/http/httputil"
-
 	"github.com/artistomin/proxy/internal/app/proxy/cache"
 	"github.com/artistomin/proxy/internal/app/proxy/config"
-	"github.com/artistomin/proxy/internal/app/proxy/connpool"
 )
 
 const sizeValue = 1024
 
 // Handler common structure for handler
 type Handler struct {
-	Cache   cache.Cacher
-	Domains config.Domains
-	Pool    connpool.ConnPool
-}
-
-func (h *Handler) GetConn(r *http.Request) (net.Conn, error) {
-	host := r.Host
-	ip := h.Domains[host].Pool.IP
-
-	return h.Pool.Get(host, ip)
-}
-
-func (h *Handler) ReturnConn(r *http.Request, conn net.Conn) error {
-	return h.Pool.Put(r.Host, conn)
+	Cache  cache.Cacher
+	Config *config.Config
 }
 
 // Request performs request to destination server
-func (h *Handler) Request(conn net.Conn, r *http.Request) (*http.Response, error) {
-	rmProxyHeaders(r)
+/* func (h *Handler) Request(conn net.Conn, r *http.Request) (*http.Response, error) {
+	h.RmProxyHeaders(r)
 
 	dumpReq, err := httputil.DumpRequest(r, true)
 	if err != nil {
@@ -50,13 +32,13 @@ func (h *Handler) Request(conn net.Conn, r *http.Request) (*http.Response, error
 		return nil, err
 	}
 
-	res, err := http.ReadResponse(resReader, r)
+	res, err := http.ReadResponse(resReader, nil)
 	if err != nil {
 		return nil, err
 	}
 
 	return res, nil
-}
+} */
 
 // ShouldResCached checks should be response cached or not
 func (h *Handler) ShouldResCached(host, path string, bodySize int, cacheCfg config.Cache) bool {

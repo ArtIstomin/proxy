@@ -11,7 +11,7 @@ func (h *Handler) CopyHeaders(dst, src http.Header) {
 	}
 }
 
-func rmProxyHeaders(r *http.Request) {
+func (h *Handler) RmProxyHeaders(r *http.Request) {
 	r.RequestURI = ""
 	r.Header.Del("Proxy-Connection")
 	r.Header.Del("Connection")

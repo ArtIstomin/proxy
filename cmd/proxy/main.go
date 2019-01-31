@@ -1,18 +1,13 @@
 package main
 
 import (
-	"crypto/tls"
 	"flag"
 	"log"
-	"net"
 	"net/http"
 	"time"
 
-	"github.com/artistomin/proxy/internal/app/proxy/certificate"
 	"github.com/artistomin/proxy/internal/app/proxy/config"
-	"github.com/artistomin/proxy/internal/app/proxy/connpool"
 	"github.com/artistomin/proxy/internal/app/proxy/handlerhttp"
-	"github.com/artistomin/proxy/internal/app/proxy/handlerhttps"
 	inmemoryCache "github.com/artistomin/proxy/internal/app/proxy/inmemory"
 )
 
@@ -25,38 +20,47 @@ var (
 func main() {
 	flag.Parse()
 
-	domainsCfg, err := config.Load(*cfgPath)
+	cfg, err := config.Load(*cfgPath)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	storage := inmemoryCache.New()
-	pool := initPool(domainsCfg)
-	handlerHTTP := handlerhttp.New(domainsCfg, storage, pool)
-	handlerHTTPS := handlerhttps.New(domainsCfg, storage, pool)
+	transport := initTransport(cfg)
+	handlerHTTP := handlerhttp.New(cfg, storage, transport)
+	// handlerHTTPS := handlerhttps.New(domainsCfg, storage, transport)
 
 	httpProxy := &http.Server{
 		Addr:    *httpPort,
 		Handler: handlerHTTP,
 	}
-	httpsProxy := &http.Server{
+	/* httpsProxy := &http.Server{
 		Addr:         *httpsPort,
 		Handler:      handlerHTTPS,
 		TLSNextProto: make(map[string]func(*http.Server, *tls.Conn, http.Handler), 0),
-	}
+	} */
 
 	log.Printf("Listening http on %s and https on %s\n", *httpPort, *httpsPort)
-	go func() {
+	/* go func() {
 		err := httpProxy.ListenAndServe()
 		if err != nil {
 			log.Fatal(err)
 		}
-	}()
+	}() */
 
-	log.Fatal(httpsProxy.ListenAndServeTLS("certs/myCA.cer", "certs/myCA.key"))
+	log.Fatal(httpProxy.ListenAndServe())
+	// log.Fatal(httpsProxy.ListenAndServeTLS("certs/myCA.cer", "certs/myCA.key"))
 }
 
-func initPool(domains config.Domains) *connpool.Pool {
+func initTransport(cfg *config.Config) *http.Transport {
+	return &http.Transport{
+		MaxConnsPerHost:       cfg.MaxConn,
+		IdleConnTimeout:       time.Duration(cfg.IdleTimeout) * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+	}
+}
+
+/* func initPool(domains config.Domains) *connpool.Pool {
 	pool := connpool.New()
 
 	for host, cfg := range domains {
@@ -71,6 +75,7 @@ func initPool(domains config.Domains) *connpool.Pool {
 
 				conn, err := tls.DialWithDialer(dialer, "tcp", ip, tlsCfg)
 				if err != nil {
+
 					return nil, err
 				}
 
@@ -79,12 +84,26 @@ func initPool(domains config.Domains) *connpool.Pool {
 		} else {
 			connFunc = func(ip string) (net.Conn, error) {
 				timeout := time.Duration(cfg.Timeout) * time.Second
-
-				conn, err := net.DialTimeout("tcp", ip, timeout)
+				dialer := &net.Dialer{
+					Timeout:   timeout,
+					KeepAlive: timeout,
+				}
+				conn, err := dialer.Dial("tcp", ip)
 				if err != nil {
 					return nil, err
 				}
 
+				err = conn.(*net.TCPConn).SetKeepAlive(true)
+
+				if err != nil {
+					return nil, err
+				}
+
+				err = conn.(*net.TCPConn).SetKeepAlivePeriod(timeout)
+
+				if err != nil {
+					return nil, err
+				}
 				return conn, nil
 			}
 		}
@@ -93,4 +112,4 @@ func initPool(domains config.Domains) *connpool.Pool {
 	}
 
 	return pool
-}
+} */

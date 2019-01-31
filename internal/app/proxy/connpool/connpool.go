@@ -1,7 +1,6 @@
 package connpool
 
-import (
-	"errors"
+/*import (
 	"fmt"
 	"net"
 	"sync"
@@ -32,34 +31,29 @@ type Pool struct {
 }
 
 func (p *Pool) Get(host string, ip string) (net.Conn, error) {
-	hostPool := p.HostPool[host]
 	go func() {
 		conn, err := p.createConn(host, ip)
 		if err != nil {
 			return
 		}
 
-		hostPool.conns <- conn
+		p.HostPool[host].conns <- conn
 	}()
 
 	select {
-	case conn := <-hostPool.conns:
+	case conn := <-p.HostPool[host].conns:
 		return conn, nil
 	}
 }
 
 func (p *Pool) Put(host string, conn net.Conn) error {
-	if conn == nil {
-		p.Lock()
-		p.HostPool[host].totalConn--
-		p.Unlock()
-		return errors.New("Cannot put nil to connection pool.")
-	}
-
 	select {
 	case p.HostPool[host].conns <- conn:
 		return nil
 	default:
+		p.Lock()
+		defer p.Unlock()
+		p.HostPool[host].totalConn--
 		return conn.Close()
 	}
 }
@@ -77,19 +71,23 @@ func (p *Pool) createConn(host, ip string) (net.Conn, error) {
 	p.Lock()
 	defer p.Unlock()
 
-	hostPool := p.HostPool[host]
+	// hostPool := p.HostPool[host]
 
-	if hostPool.totalConn >= hostPool.maxConn {
-		return nil, fmt.Errorf("pool error: maximum connections exceeded")
+	if p.HostPool[host].totalConn >= p.HostPool[host].maxConn {
+		return nil, fmt.Errorf("maximum connections exceeded")
 	}
 
-	conn, err := hostPool.createConn(ip)
+	conn, err := p.HostPool[host].createConn(ip)
 	if err != nil {
-		return nil, fmt.Errorf("pool erorr: cannot create new connection: %s", err)
+		return nil, fmt.Errorf("cannot create new connection: %s", err)
 	}
-	hostPool.totalConn++
+	p.HostPool[host].totalConn++
 
 	return conn, nil
+}
+
+func (p *Pool) connIsClosed(conn net.Conn) bool {
+	return false
 }
 
 func New() *Pool {
@@ -98,3 +96,4 @@ func New() *Pool {
 		make(HostPool),
 	}
 }
+*/

@@ -7,23 +7,26 @@ import (
 	"time"
 )
 
-// Domains represents config structure
+// Config represents config structure
+type Config struct {
+	MaxConn     int `json:"max_connections"`
+	Timeout     int `json:"timeout"`
+	IdleTimeout int `json:"idle_timeout"`
+	KeepAlive   int `json:"keep_alive"`
+	Domains     `json:"domains"`
+}
+
+// Domains represents domains structure
 type Domains map[string]Domain
 
 // Domain represenets structure of each domain in the config
 type Domain struct {
-	Pool         `json:"pool"`
+	IP           string `json:"ip"`
 	BrowserCache `json:"browser_cache"`
 	Cache        `json:"cache"`
 }
 
-type Pool struct {
-	IP      string `json:"ip"`
-	Timeout int    `json:"timeout"`
-	MaxConn int    `json:"max_connections"`
-	Secure  bool   `json:"secure"`
-}
-
+// Cache represes structure of cache config
 type Cache struct {
 	Enabled     bool          `json:"enabled"`
 	TTL         time.Duration `json:"ttl,omitempty"`
@@ -47,19 +50,17 @@ type BrowserCache struct {
 }
 
 // Load returns Domains structure
-func Load(path string) (Domains, error) {
+func Load(path string) (*Config, error) {
 	bytes, err := ioutil.ReadFile(path)
-
 	if err != nil {
 		return nil, fmt.Errorf("Config error: %s", err)
 	}
 
-	domains := make(Domains)
-	err = json.Unmarshal(bytes, &domains)
-
+	cfg := new(Config)
+	err = json.Unmarshal(bytes, &cfg)
 	if err != nil {
 		return nil, fmt.Errorf("Config error: %s", err)
 	}
 
-	return domains, nil
+	return cfg, nil
 }
