@@ -1,19 +1,15 @@
 package main
 
 import (
-	"crypto/tls"
 	"flag"
 	"log"
-	"net"
 	"net/http"
 	"time"
 
-	"github.com/artistomin/proxy/internal/app/proxy/certificate"
 	"github.com/artistomin/proxy/internal/app/proxy/config"
-	"github.com/artistomin/proxy/internal/app/proxy/connpool"
 	"github.com/artistomin/proxy/internal/app/proxy/handlerhttp"
 	"github.com/artistomin/proxy/internal/app/proxy/handlerhttps"
-	inmemoryCache "github.com/artistomin/proxy/internal/app/proxy/inmemory"
+	"github.com/artistomin/proxy/internal/app/proxy/inmemory"
 )
 
 var (
@@ -25,24 +21,23 @@ var (
 func main() {
 	flag.Parse()
 
-	domainsCfg, err := config.Load(*cfgPath)
+	cfg, err := config.Load(*cfgPath)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	storage := inmemoryCache.New()
-	pool := initPool(domainsCfg)
-	handlerHTTP := handlerhttp.New(domainsCfg, storage, pool)
-	handlerHTTPS := handlerhttps.New(domainsCfg, storage, pool)
+	storage := inmemory.New()
+	transport := initTransport(cfg)
+	handlerHTTP := handlerhttp.New(cfg, storage, transport)
+	handlerHTTPS := handlerhttps.New(cfg, storage, transport)
 
 	httpProxy := &http.Server{
 		Addr:    *httpPort,
 		Handler: handlerHTTP,
 	}
 	httpsProxy := &http.Server{
-		Addr:         *httpsPort,
-		Handler:      handlerHTTPS,
-		TLSNextProto: make(map[string]func(*http.Server, *tls.Conn, http.Handler), 0),
+		Addr:    *httpsPort,
+		Handler: handlerHTTPS,
 	}
 
 	log.Printf("Listening http on %s and https on %s\n", *httpPort, *httpsPort)
@@ -56,41 +51,10 @@ func main() {
 	log.Fatal(httpsProxy.ListenAndServeTLS("certs/myCA.cer", "certs/myCA.key"))
 }
 
-func initPool(domains config.Domains) *connpool.Pool {
-	pool := connpool.New()
-
-	for host, cfg := range domains {
-		var connFunc connpool.ConnFunc
-		if cfg.Pool.Secure {
-			connFunc = func(ip string) (net.Conn, error) {
-				tlsCfg := certificate.Generate(host)
-				timeout := time.Duration(cfg.Timeout) * time.Second
-				dialer := &net.Dialer{
-					Timeout: timeout,
-				}
-
-				conn, err := tls.DialWithDialer(dialer, "tcp", ip, tlsCfg)
-				if err != nil {
-					return nil, err
-				}
-
-				return conn, nil
-			}
-		} else {
-			connFunc = func(ip string) (net.Conn, error) {
-				timeout := time.Duration(cfg.Timeout) * time.Second
-
-				conn, err := net.DialTimeout("tcp", ip, timeout)
-				if err != nil {
-					return nil, err
-				}
-
-				return conn, nil
-			}
-		}
-
-		pool.Init(host, connFunc, cfg.Pool)
+func initTransport(cfg *config.Config) *http.Transport {
+	return &http.Transport{
+		MaxConnsPerHost:       cfg.MaxConn,
+		IdleConnTimeout:       cfg.IdleTimeout * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
 	}
-
-	return pool
 }
