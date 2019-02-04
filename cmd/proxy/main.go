@@ -1,7 +1,6 @@
 package main
 
 import (
-	"crypto/tls"
 	"flag"
 	"log"
 	"net/http"
@@ -37,9 +36,8 @@ func main() {
 		Handler: handlerHTTP,
 	}
 	httpsProxy := &http.Server{
-		Addr:         *httpsPort,
-		Handler:      handlerHTTPS,
-		TLSNextProto: make(map[string]func(*http.Server, *tls.Conn, http.Handler), 0),
+		Addr:    *httpsPort,
+		Handler: handlerHTTPS,
 	}
 
 	log.Printf("Listening http on %s and https on %s\n", *httpPort, *httpsPort)
