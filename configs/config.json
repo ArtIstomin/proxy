@@ -37,7 +37,7 @@
                     "max_size": 10,
                     "size_units": "mb"
                 },
-                "cached": [".js", ".png", ".gif", ".jpeg", ".jpg"],
+                "cached": [".png", ".gif", ".jpeg", ".jpg", ".js", ".css"],
                 "no_cached": ["favicon"]
             },
             "browser_cache": {

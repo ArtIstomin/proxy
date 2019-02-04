@@ -1,14 +1,13 @@
 package handlerhttp
 
 import (
-	"bytes"
+	"context"
 	"io"
 	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
 	"net/url"
-	"runtime/debug"
 	"strconv"
 	"time"
 
@@ -19,43 +18,28 @@ import (
 
 type HttpHandler struct {
 	handler.Handler
-	tr *http.Transport
 }
-
-/* var dialer = &net.Dialer{
-	Timeout: 10 * time.Second,
-}
-
-// conn, err := hh.GetConn(r)
-var tr = &http.Transport{
-	Dial: func(network, ip string) (net.Conn, error) {
-		ip = "157.150.185.49:80"
-		return dialer.Dial(network, ip)
-	},
-	MaxConnsPerHost: 10,
-	IdleConnTimeout: 10 * time.Second,
-} */
 
 func (hh *HttpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer func() {
 		if err := recover(); err != nil {
-			debug.PrintStack()
 			log.Printf("panic: %s", err)
 			w.WriteHeader(http.StatusInternalServerError)
 		}
 	}()
 
-	hostCfg := hh.Config.Domains[r.Host]
+	host := r.Host
+	hostCfg := hh.Config.Domains[host]
 	dialer := &net.Dialer{
-		Timeout:   time.Duration(hh.Config.Timeout) * time.Second,
-		KeepAlive: time.Duration(hh.Config.KeepAlive) * time.Second,
+		Timeout:   hh.Config.Timeout * time.Second,
+		KeepAlive: hh.Config.KeepAlive * time.Second,
 	}
-	hh.tr.Dial = func(network, ip string) (net.Conn, error) {
+	hh.Tr.DialContext = func(ctx context.Context, network, ip string) (net.Conn, error) {
 		ip = hostCfg.IP
-		return dialer.Dial(network, ip)
+		return dialer.DialContext(ctx, network, ip)
 	}
 
-	r.URL, _ = url.Parse("http://" + r.Host + r.URL.String())
+	r.URL, _ = url.Parse("http://" + host + r.URL.String())
 
 	hh.RmProxyHeaders(r)
 	hh.LogRequest(r, "http")
@@ -63,20 +47,19 @@ func (hh *HttpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet {
 		hh.handlerCache(w, r, hostCfg)
 	} else {
-		hh.handler(w, r)
+		hh.DefaultHandler(w, r)
 	}
 }
 
-func (hh *HttpHandler) handlerCache(w http.ResponseWriter, r *http.Request, hostCfg config.Domain) {
+func (hh *HttpHandler) handlerCache(w http.ResponseWriter, r *http.Request,
+	hostCfg *config.Domain) {
 	host := r.Host
 	url := r.URL.String()
 	cacheCfg := hostCfg.Cache
 	bCacheCfg := hostCfg.BrowserCache
 
 	if bCacheCfg.Enabled {
-		ttl := hh.GetTTL(bCacheCfg.TTL, bCacheCfg.TTLUnits)
-		ttlStr := strconv.Itoa(ttl)
-
+		ttlStr := strconv.Itoa(bCacheCfg.TTLSeconds)
 		w.Header().Set("Cache-Control", "public, max-age="+ttlStr)
 	} else {
 		w.Header().Del("Cache-Control")
@@ -84,29 +67,9 @@ func (hh *HttpHandler) handlerCache(w http.ResponseWriter, r *http.Request, host
 
 	switch {
 	case cacheCfg.Enabled && hh.Cache.Has(host, url):
-		cachedValue := hh.Cache.Get(host, url)
-		res := &http.Response{
-			Status:     cachedValue.Response.Status,
-			StatusCode: cachedValue.Response.StatusCode,
-			Proto:      cachedValue.Response.Proto,
-			ProtoMajor: cachedValue.Response.ProtoMajor,
-			ProtoMinor: cachedValue.Response.ProtoMinor,
-			Header:     cachedValue.Response.Header,
-		}
-		bodyReader := bytes.NewReader(cachedValue.Body)
-
-		hh.CopyHeaders(w.Header(), res.Header)
-
-		bytes, err := io.Copy(w, bodyReader)
-		if err != nil {
-			log.Printf("cache error: %s", err)
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-
-		log.Printf("From cache: %s, bytes: %d", url, bytes)
+		hh.FromCache(w, r)
 	default:
-		res, err := hh.tr.RoundTrip(r)
+		res, err := hh.Tr.RoundTrip(r)
 		if err != nil {
 			log.Printf("request error: %s", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -126,7 +89,7 @@ func (hh *HttpHandler) handlerCache(w http.ResponseWriter, r *http.Request, host
 		}
 
 		if hh.ShouldResCached(host, r.URL.Path, len(body), cacheCfg) {
-			ttl := time.Duration(hh.GetTTL(cacheCfg.TTL, cacheCfg.TTLUnits))
+			ttl := time.Duration(cacheCfg.TTLSeconds)
 			expireTime := time.Now().UTC().Add(ttl)
 			response := cache.Response{
 				Status:     res.Status,
@@ -142,28 +105,7 @@ func (hh *HttpHandler) handlerCache(w http.ResponseWriter, r *http.Request, host
 	}
 }
 
-func (hh *HttpHandler) handler(w http.ResponseWriter, r *http.Request) {
-	res, err := hh.tr.RoundTrip(r)
-	if err != nil {
-		log.Printf("request error: %s", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	defer res.Body.Close()
-
-	hh.CopyHeaders(w.Header(), res.Header)
-
-	bodyReader := io.TeeReader(res.Body, w)
-
-	_, err = ioutil.ReadAll(bodyReader)
-	if err != nil {
-		log.Printf("body error: %s", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-}
-
 // New creates new http handler
 func New(cfg *config.Config, cache cache.Cacher, tr *http.Transport) *HttpHandler {
-	return &HttpHandler{handler.Handler{cache, cfg}, tr}
+	return &HttpHandler{handler.Handler{cache, cfg, tr}}
 }

@@ -1,56 +1,70 @@
 package handler
 
 import (
+	"bytes"
+	"io"
+	"log"
+	"net/http"
+
 	"github.com/artistomin/proxy/internal/app/proxy/cache"
 	"github.com/artistomin/proxy/internal/app/proxy/config"
 )
-
-const sizeValue = 1024
 
 // Handler common structure for handler
 type Handler struct {
 	Cache  cache.Cacher
 	Config *config.Config
+	Tr     *http.Transport
 }
 
-// Request performs request to destination server
-/* func (h *Handler) Request(conn net.Conn, r *http.Request) (*http.Response, error) {
-	h.RmProxyHeaders(r)
+func (h *Handler) FromCache(w http.ResponseWriter, r *http.Request) {
+	url := r.URL.String()
+	cachedValue := h.Cache.Get(r.Host, url)
 
-	dumpReq, err := httputil.DumpRequest(r, true)
+	res := &http.Response{
+		Status:     cachedValue.Response.Status,
+		StatusCode: cachedValue.Response.StatusCode,
+		Proto:      cachedValue.Response.Proto,
+		ProtoMajor: cachedValue.Response.ProtoMajor,
+		ProtoMinor: cachedValue.Response.ProtoMinor,
+		Header:     cachedValue.Response.Header,
+	}
+	bodyReader := bytes.NewReader(cachedValue.Body)
+
+	h.CopyHeaders(w.Header(), res.Header)
+
+	bytes, err := io.Copy(w, bodyReader)
 	if err != nil {
-		return nil, err
+		log.Printf("cache error: %s", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 
-	_, err = conn.Write(dumpReq)
-	if err != nil {
-		return nil, err
-	}
+	log.Printf("From cache: %s, bytes: %d", url, bytes)
+}
 
-	resReader := bufio.NewReader(conn)
+func (h *Handler) DefaultHandler(w http.ResponseWriter, r *http.Request) {
+	res, err := h.Tr.RoundTrip(r)
 	if err != nil {
-		return nil, err
+		log.Printf("request error: %s", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
+	defer res.Body.Close()
 
-	res, err := http.ReadResponse(resReader, nil)
+	h.CopyHeaders(w.Header(), res.Header)
+
+	_, err = io.Copy(w, res.Body)
 	if err != nil {
-		return nil, err
+		log.Printf("copy error: %s", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
-
-	return res, nil
-} */
+}
 
 // ShouldResCached checks should be response cached or not
 func (h *Handler) ShouldResCached(host, path string, bodySize int, cacheCfg config.Cache) bool {
 	if !cacheCfg.Enabled {
-		return false
-	}
-
-	if (h.Cache.Size(host) + bodySize) >= maxSizeBytes(cacheCfg.MaxSize, cacheCfg.SizeUnits) {
-		return false
-	}
-
-	if bodySize > maxSizeBytes(cacheCfg.CacheObject.MaxSize, cacheCfg.CacheObject.SizeUnits) {
 		return false
 	}
 
@@ -62,5 +76,19 @@ func (h *Handler) ShouldResCached(host, path string, bodySize int, cacheCfg conf
 		return false
 	}
 
+	if bodySize > cacheCfg.CacheObject.MaxSizeBytes {
+		return false
+	}
+
+	if (h.Cache.Size(host) + bodySize) >= cacheCfg.MaxSizeBytes {
+		return false
+	}
+
 	return true
+}
+
+// LogRequest logging request
+func (h *Handler) LogRequest(r *http.Request, scheme string) {
+	log.Printf("Scheme: %s, Method: %s, Host: %s, Url: %s\n", scheme, r.Method, r.Host,
+		r.URL.String())
 }
