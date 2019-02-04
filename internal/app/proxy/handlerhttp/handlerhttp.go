@@ -1,15 +1,18 @@
 package handlerhttp
 
 import (
+	"context"
+	"io"
 	"io/ioutil"
 	"log"
+	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"time"
 
 	"github.com/artistomin/proxy/internal/app/proxy/cache"
 	"github.com/artistomin/proxy/internal/app/proxy/config"
-	"github.com/artistomin/proxy/internal/app/proxy/connpool"
 	"github.com/artistomin/proxy/internal/app/proxy/handler"
 )
 
@@ -25,49 +28,48 @@ func (hh *HttpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
+	host := r.Host
+	hostCfg := hh.Config.Domains[host]
+	dialer := &net.Dialer{
+		Timeout:   hh.Config.Timeout * time.Second,
+		KeepAlive: hh.Config.KeepAlive * time.Second,
+	}
+	hh.Tr.DialContext = func(ctx context.Context, network, ip string) (net.Conn, error) {
+		ip = hostCfg.IP
+		return dialer.DialContext(ctx, network, ip)
+	}
+
+	r.URL, _ = url.Parse("http://" + host + r.URL.String())
+
+	hh.RmProxyHeaders(r)
 	hh.LogRequest(r, "http")
 
-	hostCfg := hh.Domains[r.Host]
 	if r.Method == http.MethodGet {
 		hh.handlerCache(w, r, hostCfg)
 	} else {
-		hh.handler(w, r, hostCfg)
+		hh.DefaultHandler(w, r)
 	}
 }
 
-func (hh *HttpHandler) handlerCache(w http.ResponseWriter, r *http.Request, hostCfg config.Domain) {
-	var res *http.Response
-	var body []byte
+func (hh *HttpHandler) handlerCache(w http.ResponseWriter, r *http.Request,
+	hostCfg *config.Domain) {
 	host := r.Host
 	url := r.URL.String()
 	cacheCfg := hostCfg.Cache
 	bCacheCfg := hostCfg.BrowserCache
 
+	if bCacheCfg.Enabled {
+		ttlStr := strconv.Itoa(bCacheCfg.TTLSeconds)
+		w.Header().Set("Cache-Control", "public, max-age="+ttlStr)
+	} else {
+		w.Header().Del("Cache-Control")
+	}
+
 	switch {
 	case cacheCfg.Enabled && hh.Cache.Has(host, url):
-		cachedValue := hh.Cache.Get(host, url)
-
-		body = cachedValue.Body
-		res = &http.Response{
-			Status:     cachedValue.Response.Status,
-			StatusCode: cachedValue.Response.StatusCode,
-			Proto:      cachedValue.Response.Proto,
-			ProtoMajor: cachedValue.Response.ProtoMajor,
-			ProtoMinor: cachedValue.Response.ProtoMinor,
-			Header:     cachedValue.Response.Header,
-		}
-
-		log.Printf("From cache: %s, Bytes: %d", url, len(body))
+		hh.FromCache(w, r)
 	default:
-		conn, err := hh.GetConn(r)
-		if err != nil {
-			log.Printf("connection error: %s", err)
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		defer hh.ReturnConn(r, conn)
-
-		res, err = hh.Request(conn, r)
+		res, err := hh.Tr.RoundTrip(r)
 		if err != nil {
 			log.Printf("request error: %s", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -75,7 +77,11 @@ func (hh *HttpHandler) handlerCache(w http.ResponseWriter, r *http.Request, host
 		}
 		defer res.Body.Close()
 
-		body, err = ioutil.ReadAll(res.Body)
+		bodyReader := io.TeeReader(res.Body, w)
+
+		hh.CopyHeaders(w.Header(), res.Header)
+
+		body, err := ioutil.ReadAll(bodyReader)
 		if err != nil {
 			log.Printf("body error: %s", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -83,7 +89,7 @@ func (hh *HttpHandler) handlerCache(w http.ResponseWriter, r *http.Request, host
 		}
 
 		if hh.ShouldResCached(host, r.URL.Path, len(body), cacheCfg) {
-			ttl := time.Duration(hh.GetTTL(cacheCfg.TTL, cacheCfg.TTLUnits))
+			ttl := time.Duration(cacheCfg.TTLSeconds)
 			expireTime := time.Now().UTC().Add(ttl)
 			response := cache.Response{
 				Status:     res.Status,
@@ -97,52 +103,9 @@ func (hh *HttpHandler) handlerCache(w http.ResponseWriter, r *http.Request, host
 			hh.Cache.Put(host, url, response, body, expireTime)
 		}
 	}
-
-	hh.CopyHeaders(w.Header(), res.Header)
-	w.Header().Del("Date")
-
-	if bCacheCfg.Enabled {
-		ttl := hh.GetTTL(bCacheCfg.TTL, bCacheCfg.TTLUnits)
-		ttlStr := strconv.Itoa(ttl)
-
-		w.Header().Set("Cache-Control", "public, max-age="+ttlStr)
-	} else {
-		w.Header().Del("Cache-Control")
-	}
-
-	w.Write(body)
-}
-
-func (hh *HttpHandler) handler(w http.ResponseWriter, r *http.Request, hostCfg config.Domain) {
-	conn, err := hh.GetConn(r)
-	if err != nil {
-		log.Printf("connection error: %s", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	defer hh.ReturnConn(r, conn)
-
-	res, err := hh.Request(conn, r)
-	if err != nil {
-		log.Printf("request error: %s", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	defer res.Body.Close()
-
-	hh.CopyHeaders(w.Header(), res.Header)
-
-	body, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		log.Printf("body error: %s", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	w.Write(body)
 }
 
 // New creates new http handler
-func New(domains config.Domains, cache cache.Cacher, pool connpool.ConnPool) *HttpHandler {
-	return &HttpHandler{handler.Handler{cache, domains, pool}}
+func New(cfg *config.Config, cache cache.Cacher, tr *http.Transport) *HttpHandler {
+	return &HttpHandler{handler.Handler{cache, cfg, tr}}
 }

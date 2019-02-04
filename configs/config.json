@@ -1,55 +1,50 @@
 {
-    "www.un.org": {
-        "pool": {
-            "secure": false,
+    "max_connections": 100,
+    "idle_timeout": 90,
+    "timeout": 30,
+    "keep_alive": 30,
+    "domains": {
+        "www.un.org": {
             "ip": "157.150.185.49:80",
-            "timeout": 10,
-            "max_connections": 2
-        },
-        
-        "cache": {
-            "enabled": true,
-            "ttl": 1,
-            "ttl_units": "h",
-            "max_size": 1,
-            "size_units": "kb",
-            "cache_object": {
-                "max_size": 10,
-                "size_units": "mb"
+            "cache": {
+                "enabled": true,
+                "ttl": 1,
+                "ttl_units": "h",
+                "max_size": 100,
+                "size_units": "mb",
+                "cache_object": {
+                    "max_size": 10,
+                    "size_units": "mb"
+                },
+                "cached": [".png", ".gif", ".jpeg", ".jpg", ".js", ".css"],
+                "no_cached": ["favicon"]
             },
-            "cached": [".js", ".png", ".gif", ".jpeg", ".jpg"],
-            "no_cached": ["favicon"]
+            "browser_cache": {
+                "ttl": 1,
+                "ttl_units": "h",
+                "enabled": false
+            }
         },
-        "browser_cache": {
-            "ttl": 1,
-            "ttl_units": "h",
-            "enabled": false
-        }
-    },
-    "www.tut.by": {
-        "pool": {
-            "secure": true,
+        "www.tut.by": {
             "ip": "178.172.160.4:443",
-            "timeout": 10,
-            "max_connections": 10
-        },
-        "cache": {
-            "enabled": true,
-            "ttl": 1,
-            "ttl_units": "h",
-            "max_size": 100,
-            "size_units": "mb",
-            "cache_object": {
-                "max_size": 10,
-                "size_units": "mb"
+            "cache": {
+                "enabled": true,
+                "ttl": 1,
+                "ttl_units": "h",
+                "max_size": 100,
+                "size_units": "mb",
+                "cache_object": {
+                    "max_size": 10,
+                    "size_units": "mb"
+                },
+                "cached": [".png", ".gif", ".jpeg", ".jpg", ".js", ".css"],
+                "no_cached": ["favicon"]
             },
-            "cached": [".js", ".png", ".gif", ".jpeg", ".jpg"],
-            "no_cached": ["favicon"]
-        },
-        "browser_cache": {
-            "ttl": 1,
-            "ttl_units": "h",
-            "enabled": false
+            "browser_cache": {
+                "ttl": 1,
+                "ttl_units": "h",
+                "enabled": false
+            }
         }
     }
 }
