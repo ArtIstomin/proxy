@@ -16,6 +16,7 @@ var (
 	httpPort  = flag.String("http-port", ":80", "Port for http proxy")
 	httpsPort = flag.String("https-port", ":443", "Port for https proxy")
 	cfgPath   = flag.String("cfg-path", "configs/config.json", "Path to config file")
+	crtPath   = flag.String("crt-path", "certs", "Path to certificates")
 )
 
 func main() {
@@ -48,7 +49,7 @@ func main() {
 		}
 	}()
 
-	log.Fatal(httpsProxy.ListenAndServeTLS("certs/myCA.cer", "certs/myCA.key"))
+	log.Fatal(httpsProxy.ListenAndServeTLS(*crtPath+"/myCA.cer", *crtPath+"/myCA.key"))
 }
 
 func initTransport(cfg *config.Config) *http.Transport {

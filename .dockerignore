@@ -1,0 +1,4 @@
+### Certs ###
+certs/*
+!certs/myCA.cer
+!certs/myCA.key
