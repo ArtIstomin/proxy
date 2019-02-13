@@ -11,6 +11,7 @@ services:
     restart: unless-stopped
   activity:
     image: activity
+    command: ["--dsn", "postgres://root:root@postgres:5432/activity?sslmode=disable"]
     depends_on: 
       - postgres
     ports:

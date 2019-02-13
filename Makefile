@@ -21,7 +21,7 @@ build-container:
 run-compose:
 	docker-compose -f deployments/docker-compose.yaml up
 
-run-container-with-build: build-container run-container
+run-compose-with-build: build-container run-compose
 
 proto-all: proto-activity
 
