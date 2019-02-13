@@ -1,34 +1,44 @@
 syntax = "proto3";
 package activitypb;
 
+import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
+
 
 option go_package = "activitypb";
 
 service Activity {
-    rpc StoreRequest(ReqRequest) returns (ReqReply) {}
-    rpc UpdateReqReply(ReqRequest) returns (ReqReply) {}
-    rpc StoreResponse(ResRequest) returns (ResReply) {}
+    rpc StoreRequest(ReqRequest) returns (google.protobuf.Empty) {}
+    rpc UpdateRequest(ReqRequest) returns (google.protobuf.Empty) {}
+    rpc StoreResponse(ResRequest) returns (google.protobuf.Empty) {}
+    rpc GetResponse(GetResRequest) returns (ResRequest) {}
+    rpc GetHostSize(HostSizeRequest) returns (HostSizeReply) {}
 }
 
 message ReqRequest {
-    string url = 1;
-    bytes req = 2;
-    bool completed = 3;
-    google.protobuf.Timestamp createdAt = 4;
-    google.protobuf.Timestamp updatedAt = 5;
-}
-
-message ReqReply {
     int32 reqId = 1;
+    string url = 2;
+    bytes request = 3;
+    bool completed = 4;
 }
 
 message ResRequest {
-    int32 reqId = 1;
-    bytes response = 2;
-    google.protobuf.Timestamp createdAt = 3;
+    string host = 1;
+    string url = 2;
+    bytes response = 3;
+    bytes body = 4;
+    google.protobuf.Timestamp expires = 5;
 }
 
-message ResReply {
-    int32 resId = 1;
+message GetResRequest {
+    string host = 1;
+    string url = 2;
+}
+
+message HostSizeRequest {
+    string host = 1;
+}
+
+message HostSizeReply {
+    int64 size = 1;
 }

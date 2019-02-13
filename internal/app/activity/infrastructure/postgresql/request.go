@@ -11,10 +11,18 @@ type requestRepo struct {
 }
 
 func (rr *requestRepo) Create(req *activity.Request) (activity.ReqID, error) {
-	return 0, nil
+	if err := rr.db.Create(req).Error; err != nil {
+		return 0, err
+	}
+
+	return req.ID, nil
 }
 
 func (rr *requestRepo) Update(id activity.ReqID, req *activity.Request) error {
+	if err := rr.db.Model(req).Updates(req).Error; err != nil {
+		return err
+	}
+
 	return nil
 }
 

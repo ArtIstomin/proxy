@@ -1,5 +1,6 @@
 GOPATH=$(HOME)/go
 BIN_DIR = $(GOPATH)/bin
+PROTO_DIR = ./internal/pkg/proto
 
 install: 
 	go mod download
@@ -11,13 +12,18 @@ lint:
 	$(BIN_DIR)/golint
 
 run:
-	go run cmd/proxy/main.go
+	sudo go run cmd/proxy/main.go
 
 build-container:
 	docker build -f build/proxy/Dockerfile --tag=myproxy .
+	docker build -f build/activity/Dockerfile --tag=activity .
 
-run-container:
-	docker run -p 80:80 -p 443:443 myproxy
+run-compose:
+	docker-compose -f deployments/docker-compose.yaml up
 
 run-container-with-build: build-container run-container
-	
+
+proto-all: proto-activity
+
+proto-activity:
+	protoc -I=$(PROTO_DIR)/activity --go_out=plugins=grpc:$(PROTO_DIR)/activity $(PROTO_DIR)/activity/activity.proto

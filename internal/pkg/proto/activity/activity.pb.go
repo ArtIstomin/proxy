@@ -6,6 +6,7 @@ package activitypb
 import proto "github.com/golang/protobuf/proto"
 import fmt "fmt"
 import math "math"
+import empty "github.com/golang/protobuf/ptypes/empty"
 import timestamp "github.com/golang/protobuf/ptypes/timestamp"
 
 import (
@@ -25,21 +26,20 @@ var _ = math.Inf
 const _ = proto.ProtoPackageIsVersion2 // please upgrade the proto package
 
 type ReqRequest struct {
-	Url                  string               `protobuf:"bytes,1,opt,name=url,proto3" json:"url,omitempty"`
-	Req                  []byte               `protobuf:"bytes,2,opt,name=req,proto3" json:"req,omitempty"`
-	Completed            bool                 `protobuf:"varint,3,opt,name=completed,proto3" json:"completed,omitempty"`
-	CreatedAt            *timestamp.Timestamp `protobuf:"bytes,4,opt,name=createdAt,proto3" json:"createdAt,omitempty"`
-	UpdatedAt            *timestamp.Timestamp `protobuf:"bytes,5,opt,name=updatedAt,proto3" json:"updatedAt,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}             `json:"-"`
-	XXX_unrecognized     []byte               `json:"-"`
-	XXX_sizecache        int32                `json:"-"`
+	ReqId                int32    `protobuf:"varint,1,opt,name=reqId,proto3" json:"reqId,omitempty"`
+	Url                  string   `protobuf:"bytes,2,opt,name=url,proto3" json:"url,omitempty"`
+	Request              []byte   `protobuf:"bytes,3,opt,name=request,proto3" json:"request,omitempty"`
+	Completed            bool     `protobuf:"varint,4,opt,name=completed,proto3" json:"completed,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *ReqRequest) Reset()         { *m = ReqRequest{} }
 func (m *ReqRequest) String() string { return proto.CompactTextString(m) }
 func (*ReqRequest) ProtoMessage()    {}
 func (*ReqRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_activity_284b00025e5c3ca5, []int{0}
+	return fileDescriptor_activity_a1ff2e2591b2eb9a, []int{0}
 }
 func (m *ReqRequest) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_ReqRequest.Unmarshal(m, b)
@@ -59,6 +59,13 @@ func (m *ReqRequest) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_ReqRequest proto.InternalMessageInfo
 
+func (m *ReqRequest) GetReqId() int32 {
+	if m != nil {
+		return m.ReqId
+	}
+	return 0
+}
+
 func (m *ReqRequest) GetUrl() string {
 	if m != nil {
 		return m.Url
@@ -66,9 +73,9 @@ func (m *ReqRequest) GetUrl() string {
 	return ""
 }
 
-func (m *ReqRequest) GetReq() []byte {
+func (m *ReqRequest) GetRequest() []byte {
 	if m != nil {
-		return m.Req
+		return m.Request
 	}
 	return nil
 }
@@ -80,62 +87,12 @@ func (m *ReqRequest) GetCompleted() bool {
 	return false
 }
 
-func (m *ReqRequest) GetCreatedAt() *timestamp.Timestamp {
-	if m != nil {
-		return m.CreatedAt
-	}
-	return nil
-}
-
-func (m *ReqRequest) GetUpdatedAt() *timestamp.Timestamp {
-	if m != nil {
-		return m.UpdatedAt
-	}
-	return nil
-}
-
-type ReqReply struct {
-	ReqId                int32    `protobuf:"varint,1,opt,name=reqId,proto3" json:"reqId,omitempty"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
-}
-
-func (m *ReqReply) Reset()         { *m = ReqReply{} }
-func (m *ReqReply) String() string { return proto.CompactTextString(m) }
-func (*ReqReply) ProtoMessage()    {}
-func (*ReqReply) Descriptor() ([]byte, []int) {
-	return fileDescriptor_activity_284b00025e5c3ca5, []int{1}
-}
-func (m *ReqReply) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_ReqReply.Unmarshal(m, b)
-}
-func (m *ReqReply) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_ReqReply.Marshal(b, m, deterministic)
-}
-func (dst *ReqReply) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_ReqReply.Merge(dst, src)
-}
-func (m *ReqReply) XXX_Size() int {
-	return xxx_messageInfo_ReqReply.Size(m)
-}
-func (m *ReqReply) XXX_DiscardUnknown() {
-	xxx_messageInfo_ReqReply.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_ReqReply proto.InternalMessageInfo
-
-func (m *ReqReply) GetReqId() int32 {
-	if m != nil {
-		return m.ReqId
-	}
-	return 0
-}
-
 type ResRequest struct {
-	ReqId                int32                `protobuf:"varint,1,opt,name=reqId,proto3" json:"reqId,omitempty"`
-	Response             []byte               `protobuf:"bytes,2,opt,name=response,proto3" json:"response,omitempty"`
-	CreatedAt            *timestamp.Timestamp `protobuf:"bytes,3,opt,name=createdAt,proto3" json:"createdAt,omitempty"`
+	Host                 string               `protobuf:"bytes,1,opt,name=host,proto3" json:"host,omitempty"`
+	Url                  string               `protobuf:"bytes,2,opt,name=url,proto3" json:"url,omitempty"`
+	Response             []byte               `protobuf:"bytes,3,opt,name=response,proto3" json:"response,omitempty"`
+	Body                 []byte               `protobuf:"bytes,4,opt,name=body,proto3" json:"body,omitempty"`
+	Expires              *timestamp.Timestamp `protobuf:"bytes,5,opt,name=expires,proto3" json:"expires,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}             `json:"-"`
 	XXX_unrecognized     []byte               `json:"-"`
 	XXX_sizecache        int32                `json:"-"`
@@ -145,7 +102,7 @@ func (m *ResRequest) Reset()         { *m = ResRequest{} }
 func (m *ResRequest) String() string { return proto.CompactTextString(m) }
 func (*ResRequest) ProtoMessage()    {}
 func (*ResRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_activity_284b00025e5c3ca5, []int{2}
+	return fileDescriptor_activity_a1ff2e2591b2eb9a, []int{1}
 }
 func (m *ResRequest) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_ResRequest.Unmarshal(m, b)
@@ -165,11 +122,18 @@ func (m *ResRequest) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_ResRequest proto.InternalMessageInfo
 
-func (m *ResRequest) GetReqId() int32 {
+func (m *ResRequest) GetHost() string {
 	if m != nil {
-		return m.ReqId
+		return m.Host
 	}
-	return 0
+	return ""
+}
+
+func (m *ResRequest) GetUrl() string {
+	if m != nil {
+		return m.Url
+	}
+	return ""
 }
 
 func (m *ResRequest) GetResponse() []byte {
@@ -179,56 +143,148 @@ func (m *ResRequest) GetResponse() []byte {
 	return nil
 }
 
-func (m *ResRequest) GetCreatedAt() *timestamp.Timestamp {
+func (m *ResRequest) GetBody() []byte {
 	if m != nil {
-		return m.CreatedAt
+		return m.Body
 	}
 	return nil
 }
 
-type ResReply struct {
-	ResId                int32    `protobuf:"varint,1,opt,name=resId,proto3" json:"resId,omitempty"`
+func (m *ResRequest) GetExpires() *timestamp.Timestamp {
+	if m != nil {
+		return m.Expires
+	}
+	return nil
+}
+
+type GetResRequest struct {
+	Host                 string   `protobuf:"bytes,1,opt,name=host,proto3" json:"host,omitempty"`
+	Url                  string   `protobuf:"bytes,2,opt,name=url,proto3" json:"url,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *ResReply) Reset()         { *m = ResReply{} }
-func (m *ResReply) String() string { return proto.CompactTextString(m) }
-func (*ResReply) ProtoMessage()    {}
-func (*ResReply) Descriptor() ([]byte, []int) {
-	return fileDescriptor_activity_284b00025e5c3ca5, []int{3}
+func (m *GetResRequest) Reset()         { *m = GetResRequest{} }
+func (m *GetResRequest) String() string { return proto.CompactTextString(m) }
+func (*GetResRequest) ProtoMessage()    {}
+func (*GetResRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_activity_a1ff2e2591b2eb9a, []int{2}
 }
-func (m *ResReply) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_ResReply.Unmarshal(m, b)
+func (m *GetResRequest) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_GetResRequest.Unmarshal(m, b)
 }
-func (m *ResReply) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_ResReply.Marshal(b, m, deterministic)
+func (m *GetResRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_GetResRequest.Marshal(b, m, deterministic)
 }
-func (dst *ResReply) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_ResReply.Merge(dst, src)
+func (dst *GetResRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_GetResRequest.Merge(dst, src)
 }
-func (m *ResReply) XXX_Size() int {
-	return xxx_messageInfo_ResReply.Size(m)
+func (m *GetResRequest) XXX_Size() int {
+	return xxx_messageInfo_GetResRequest.Size(m)
 }
-func (m *ResReply) XXX_DiscardUnknown() {
-	xxx_messageInfo_ResReply.DiscardUnknown(m)
+func (m *GetResRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_GetResRequest.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_ResReply proto.InternalMessageInfo
+var xxx_messageInfo_GetResRequest proto.InternalMessageInfo
 
-func (m *ResReply) GetResId() int32 {
+func (m *GetResRequest) GetHost() string {
 	if m != nil {
-		return m.ResId
+		return m.Host
+	}
+	return ""
+}
+
+func (m *GetResRequest) GetUrl() string {
+	if m != nil {
+		return m.Url
+	}
+	return ""
+}
+
+type HostSizeRequest struct {
+	Host                 string   `protobuf:"bytes,1,opt,name=host,proto3" json:"host,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *HostSizeRequest) Reset()         { *m = HostSizeRequest{} }
+func (m *HostSizeRequest) String() string { return proto.CompactTextString(m) }
+func (*HostSizeRequest) ProtoMessage()    {}
+func (*HostSizeRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_activity_a1ff2e2591b2eb9a, []int{3}
+}
+func (m *HostSizeRequest) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_HostSizeRequest.Unmarshal(m, b)
+}
+func (m *HostSizeRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_HostSizeRequest.Marshal(b, m, deterministic)
+}
+func (dst *HostSizeRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_HostSizeRequest.Merge(dst, src)
+}
+func (m *HostSizeRequest) XXX_Size() int {
+	return xxx_messageInfo_HostSizeRequest.Size(m)
+}
+func (m *HostSizeRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_HostSizeRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_HostSizeRequest proto.InternalMessageInfo
+
+func (m *HostSizeRequest) GetHost() string {
+	if m != nil {
+		return m.Host
+	}
+	return ""
+}
+
+type HostSizeReply struct {
+	Size                 int64    `protobuf:"varint,1,opt,name=size,proto3" json:"size,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *HostSizeReply) Reset()         { *m = HostSizeReply{} }
+func (m *HostSizeReply) String() string { return proto.CompactTextString(m) }
+func (*HostSizeReply) ProtoMessage()    {}
+func (*HostSizeReply) Descriptor() ([]byte, []int) {
+	return fileDescriptor_activity_a1ff2e2591b2eb9a, []int{4}
+}
+func (m *HostSizeReply) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_HostSizeReply.Unmarshal(m, b)
+}
+func (m *HostSizeReply) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_HostSizeReply.Marshal(b, m, deterministic)
+}
+func (dst *HostSizeReply) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_HostSizeReply.Merge(dst, src)
+}
+func (m *HostSizeReply) XXX_Size() int {
+	return xxx_messageInfo_HostSizeReply.Size(m)
+}
+func (m *HostSizeReply) XXX_DiscardUnknown() {
+	xxx_messageInfo_HostSizeReply.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_HostSizeReply proto.InternalMessageInfo
+
+func (m *HostSizeReply) GetSize() int64 {
+	if m != nil {
+		return m.Size
 	}
 	return 0
 }
 
 func init() {
 	proto.RegisterType((*ReqRequest)(nil), "activitypb.ReqRequest")
-	proto.RegisterType((*ReqReply)(nil), "activitypb.ReqReply")
 	proto.RegisterType((*ResRequest)(nil), "activitypb.ResRequest")
-	proto.RegisterType((*ResReply)(nil), "activitypb.ResReply")
+	proto.RegisterType((*GetResRequest)(nil), "activitypb.GetResRequest")
+	proto.RegisterType((*HostSizeRequest)(nil), "activitypb.HostSizeRequest")
+	proto.RegisterType((*HostSizeReply)(nil), "activitypb.HostSizeReply")
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -243,9 +299,11 @@ const _ = grpc.SupportPackageIsVersion4
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
 type ActivityClient interface {
-	StoreRequest(ctx context.Context, in *ReqRequest, opts ...grpc.CallOption) (*ReqReply, error)
-	UpdateReqReply(ctx context.Context, in *ReqRequest, opts ...grpc.CallOption) (*ReqReply, error)
-	StoreResponse(ctx context.Context, in *ResRequest, opts ...grpc.CallOption) (*ResReply, error)
+	StoreRequest(ctx context.Context, in *ReqRequest, opts ...grpc.CallOption) (*empty.Empty, error)
+	UpdateRequest(ctx context.Context, in *ReqRequest, opts ...grpc.CallOption) (*empty.Empty, error)
+	StoreResponse(ctx context.Context, in *ResRequest, opts ...grpc.CallOption) (*empty.Empty, error)
+	GetResponse(ctx context.Context, in *GetResRequest, opts ...grpc.CallOption) (*ResRequest, error)
+	GetHostSize(ctx context.Context, in *HostSizeRequest, opts ...grpc.CallOption) (*HostSizeReply, error)
 }
 
 type activityClient struct {
@@ -256,8 +314,8 @@ func NewActivityClient(cc *grpc.ClientConn) ActivityClient {
 	return &activityClient{cc}
 }
 
-func (c *activityClient) StoreRequest(ctx context.Context, in *ReqRequest, opts ...grpc.CallOption) (*ReqReply, error) {
-	out := new(ReqReply)
+func (c *activityClient) StoreRequest(ctx context.Context, in *ReqRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
 	err := c.cc.Invoke(ctx, "/activitypb.Activity/StoreRequest", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -265,18 +323,36 @@ func (c *activityClient) StoreRequest(ctx context.Context, in *ReqRequest, opts 
 	return out, nil
 }
 
-func (c *activityClient) UpdateReqReply(ctx context.Context, in *ReqRequest, opts ...grpc.CallOption) (*ReqReply, error) {
-	out := new(ReqReply)
-	err := c.cc.Invoke(ctx, "/activitypb.Activity/UpdateReqReply", in, out, opts...)
+func (c *activityClient) UpdateRequest(ctx context.Context, in *ReqRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
+	err := c.cc.Invoke(ctx, "/activitypb.Activity/UpdateRequest", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *activityClient) StoreResponse(ctx context.Context, in *ResRequest, opts ...grpc.CallOption) (*ResReply, error) {
-	out := new(ResReply)
+func (c *activityClient) StoreResponse(ctx context.Context, in *ResRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
 	err := c.cc.Invoke(ctx, "/activitypb.Activity/StoreResponse", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *activityClient) GetResponse(ctx context.Context, in *GetResRequest, opts ...grpc.CallOption) (*ResRequest, error) {
+	out := new(ResRequest)
+	err := c.cc.Invoke(ctx, "/activitypb.Activity/GetResponse", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *activityClient) GetHostSize(ctx context.Context, in *HostSizeRequest, opts ...grpc.CallOption) (*HostSizeReply, error) {
+	out := new(HostSizeReply)
+	err := c.cc.Invoke(ctx, "/activitypb.Activity/GetHostSize", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -285,9 +361,11 @@ func (c *activityClient) StoreResponse(ctx context.Context, in *ResRequest, opts
 
 // ActivityServer is the server API for Activity service.
 type ActivityServer interface {
-	StoreRequest(context.Context, *ReqRequest) (*ReqReply, error)
-	UpdateReqReply(context.Context, *ReqRequest) (*ReqReply, error)
-	StoreResponse(context.Context, *ResRequest) (*ResReply, error)
+	StoreRequest(context.Context, *ReqRequest) (*empty.Empty, error)
+	UpdateRequest(context.Context, *ReqRequest) (*empty.Empty, error)
+	StoreResponse(context.Context, *ResRequest) (*empty.Empty, error)
+	GetResponse(context.Context, *GetResRequest) (*ResRequest, error)
+	GetHostSize(context.Context, *HostSizeRequest) (*HostSizeReply, error)
 }
 
 func RegisterActivityServer(s *grpc.Server, srv ActivityServer) {
@@ -312,20 +390,20 @@ func _Activity_StoreRequest_Handler(srv interface{}, ctx context.Context, dec fu
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Activity_UpdateReqReply_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Activity_UpdateRequest_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ReqRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(ActivityServer).UpdateReqReply(ctx, in)
+		return srv.(ActivityServer).UpdateRequest(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/activitypb.Activity/UpdateReqReply",
+		FullMethod: "/activitypb.Activity/UpdateRequest",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ActivityServer).UpdateReqReply(ctx, req.(*ReqRequest))
+		return srv.(ActivityServer).UpdateRequest(ctx, req.(*ReqRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -348,6 +426,42 @@ func _Activity_StoreResponse_Handler(srv interface{}, ctx context.Context, dec f
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Activity_GetResponse_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetResRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ActivityServer).GetResponse(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/activitypb.Activity/GetResponse",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ActivityServer).GetResponse(ctx, req.(*GetResRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Activity_GetHostSize_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(HostSizeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ActivityServer).GetHostSize(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/activitypb.Activity/GetHostSize",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ActivityServer).GetHostSize(ctx, req.(*HostSizeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 var _Activity_serviceDesc = grpc.ServiceDesc{
 	ServiceName: "activitypb.Activity",
 	HandlerType: (*ActivityServer)(nil),
@@ -357,40 +471,53 @@ var _Activity_serviceDesc = grpc.ServiceDesc{
 			Handler:    _Activity_StoreRequest_Handler,
 		},
 		{
-			MethodName: "UpdateReqReply",
-			Handler:    _Activity_UpdateReqReply_Handler,
+			MethodName: "UpdateRequest",
+			Handler:    _Activity_UpdateRequest_Handler,
 		},
 		{
 			MethodName: "StoreResponse",
 			Handler:    _Activity_StoreResponse_Handler,
+		},
+		{
+			MethodName: "GetResponse",
+			Handler:    _Activity_GetResponse_Handler,
+		},
+		{
+			MethodName: "GetHostSize",
+			Handler:    _Activity_GetHostSize_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
 	Metadata: "activity.proto",
 }
 
-func init() { proto.RegisterFile("activity.proto", fileDescriptor_activity_284b00025e5c3ca5) }
+func init() { proto.RegisterFile("activity.proto", fileDescriptor_activity_a1ff2e2591b2eb9a) }
 
-var fileDescriptor_activity_284b00025e5c3ca5 = []byte{
-	// 319 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x94, 0x92, 0x3d, 0x4f, 0xf3, 0x30,
-	0x10, 0xc7, 0x1f, 0x3f, 0xa5, 0x28, 0x3d, 0x4a, 0x85, 0xac, 0x0a, 0x45, 0x11, 0x12, 0x51, 0xa6,
-	0x4c, 0xae, 0x54, 0x16, 0x26, 0xa0, 0x6c, 0x5d, 0x0d, 0x2c, 0x6c, 0x6d, 0x72, 0x54, 0x91, 0x12,
-	0xec, 0xd8, 0x0e, 0x22, 0x5f, 0x8f, 0x9d, 0xef, 0x84, 0x92, 0x38, 0x2f, 0xbc, 0x09, 0x75, 0xbb,
-	0xbb, 0xdc, 0xfd, 0xf3, 0xff, 0xdd, 0x19, 0x66, 0x9b, 0xc8, 0x24, 0x2f, 0x89, 0x29, 0x99, 0x54,
-	0xc2, 0x08, 0x0a, 0x6d, 0x2e, 0xb7, 0xde, 0xf9, 0x4e, 0x88, 0x5d, 0x8a, 0x8b, 0xfa, 0xcb, 0xb6,
-	0x78, 0x5a, 0x98, 0x24, 0x43, 0x6d, 0x36, 0x99, 0x6c, 0x9a, 0x83, 0x37, 0x02, 0xc0, 0x31, 0xe7,
-	0x98, 0x17, 0xa8, 0x0d, 0x3d, 0x81, 0x51, 0xa1, 0x52, 0x97, 0xf8, 0x24, 0x9c, 0xf0, 0x2a, 0xac,
-	0x2a, 0x0a, 0x73, 0xf7, 0xbf, 0x4f, 0xc2, 0x29, 0xaf, 0x42, 0x7a, 0x06, 0x93, 0x48, 0x64, 0x32,
-	0x45, 0x83, 0xb1, 0x3b, 0xf2, 0x49, 0xe8, 0xf0, 0xbe, 0x40, 0x2f, 0x61, 0x12, 0x29, 0xdc, 0x18,
-	0x8c, 0x57, 0xc6, 0x3d, 0xf0, 0x49, 0x78, 0xb4, 0xf4, 0x58, 0xe3, 0x82, 0xb5, 0x2e, 0xd8, 0x7d,
-	0xeb, 0x82, 0xf7, 0xcd, 0xd5, 0x64, 0x21, 0x63, 0x3b, 0x39, 0xfe, 0x7b, 0xb2, 0x6b, 0x0e, 0x7c,
-	0x70, 0x6a, 0x06, 0x99, 0x96, 0x74, 0x0e, 0x63, 0x85, 0xf9, 0x3a, 0xae, 0x19, 0xc6, 0xbc, 0x49,
-	0x82, 0xd7, 0x8a, 0x52, 0xb7, 0x94, 0x3f, 0xf6, 0x50, 0x0f, 0x1c, 0x85, 0x5a, 0x8a, 0x67, 0x8d,
-	0x16, 0xb7, 0xcb, 0x3f, 0x53, 0x8d, 0xf6, 0xa0, 0x6a, 0xbc, 0xe9, 0x81, 0x37, 0x3d, 0xfc, 0xaf,
-	0x5e, 0xc7, 0xcb, 0x77, 0x02, 0xce, 0xca, 0x9e, 0x8c, 0x5e, 0xc1, 0xf4, 0xce, 0x08, 0x85, 0xad,
-	0xd5, 0x53, 0xd6, 0x5f, 0x93, 0xf5, 0x87, 0xf2, 0xe6, 0xdf, 0xea, 0x32, 0x2d, 0x83, 0x7f, 0xf4,
-	0x06, 0x66, 0x0f, 0xf5, 0x5e, 0xba, 0x85, 0xec, 0xab, 0x70, 0x0d, 0xc7, 0xd6, 0x81, 0x65, 0xff,
-	0x22, 0xa0, 0x7f, 0x11, 0xd0, 0x56, 0xe0, 0x76, 0xfa, 0x38, 0x78, 0x81, 0xdb, 0xc3, 0x7a, 0x3d,
-	0x17, 0x1f, 0x01, 0x00, 0x00, 0xff, 0xff, 0x7a, 0x80, 0x65, 0xeb, 0xa6, 0x02, 0x00, 0x00,
+var fileDescriptor_activity_a1ff2e2591b2eb9a = []byte{
+	// 386 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xa4, 0x93, 0xdf, 0x8e, 0xd2, 0x40,
+	0x14, 0xc6, 0x29, 0x7f, 0x04, 0x0e, 0x45, 0xcd, 0xc4, 0x90, 0x52, 0x4c, 0x6c, 0xc6, 0x98, 0xf4,
+	0xaa, 0x24, 0xa8, 0xf7, 0x42, 0x62, 0xd0, 0xdb, 0x41, 0x6f, 0xbc, 0xa3, 0xf4, 0x88, 0x4d, 0x5a,
+	0x67, 0xe8, 0x0c, 0xc6, 0xf2, 0x24, 0xfb, 0x76, 0xfb, 0x2a, 0x9b, 0x4e, 0x3b, 0x94, 0x65, 0xd9,
+	0xdd, 0x6c, 0xf6, 0xee, 0x1c, 0xce, 0x37, 0xbf, 0xef, 0xf0, 0x9d, 0x14, 0x5e, 0xae, 0x37, 0x2a,
+	0xfe, 0x17, 0xab, 0x3c, 0x10, 0x19, 0x57, 0x9c, 0x80, 0xe9, 0x45, 0xe8, 0x4e, 0xb6, 0x9c, 0x6f,
+	0x13, 0x9c, 0xea, 0x49, 0xb8, 0xff, 0x3d, 0xc5, 0x54, 0x18, 0xa1, 0xfb, 0xee, 0x7c, 0xa8, 0xe2,
+	0x14, 0xa5, 0x5a, 0xa7, 0xa2, 0x14, 0xd0, 0x04, 0x80, 0xe1, 0x8e, 0xe1, 0x6e, 0x8f, 0x52, 0x91,
+	0x37, 0xd0, 0xc9, 0x70, 0xf7, 0x3d, 0x72, 0x2c, 0xcf, 0xf2, 0x3b, 0xac, 0x6c, 0xc8, 0x6b, 0x68,
+	0xed, 0xb3, 0xc4, 0x69, 0x7a, 0x96, 0xdf, 0x67, 0x45, 0x49, 0x1c, 0xe8, 0x66, 0xe5, 0x13, 0xa7,
+	0xe5, 0x59, 0xbe, 0xcd, 0x4c, 0x4b, 0xde, 0x42, 0x7f, 0xc3, 0x53, 0x91, 0xa0, 0xc2, 0xc8, 0x69,
+	0x7b, 0x96, 0xdf, 0x63, 0xf5, 0x0f, 0xf4, 0xca, 0x2a, 0xec, 0xa4, 0xb1, 0x23, 0xd0, 0xfe, 0xc3,
+	0xa5, 0xd2, 0x6e, 0x7d, 0xa6, 0xeb, 0x0b, 0x66, 0x2e, 0xf4, 0x32, 0x94, 0x82, 0xff, 0x95, 0x58,
+	0xb9, 0x1d, 0xfb, 0x82, 0x10, 0xf2, 0x28, 0xd7, 0x4e, 0x36, 0xd3, 0x35, 0xf9, 0x04, 0x5d, 0xfc,
+	0x2f, 0xe2, 0x0c, 0xa5, 0xd3, 0xf1, 0x2c, 0x7f, 0x30, 0x73, 0x83, 0x32, 0x85, 0xc0, 0xa4, 0x10,
+	0xfc, 0x30, 0x29, 0x30, 0x23, 0xa5, 0x9f, 0x61, 0xb8, 0x44, 0xf5, 0xd4, 0xe5, 0xe8, 0x07, 0x78,
+	0xf5, 0x8d, 0x4b, 0xb5, 0x8a, 0x0f, 0xf8, 0xc0, 0x43, 0xfa, 0x1e, 0x86, 0xb5, 0x4c, 0x24, 0x79,
+	0x21, 0x92, 0xf1, 0x01, 0xb5, 0xa8, 0xc5, 0x74, 0x3d, 0xbb, 0x6e, 0x42, 0x6f, 0x5e, 0x1d, 0x96,
+	0x7c, 0x01, 0x7b, 0xa5, 0x78, 0x76, 0xa4, 0x8e, 0x82, 0xfa, 0xe6, 0x41, 0x7d, 0x32, 0x77, 0x74,
+	0xe7, 0xcf, 0x7d, 0x2d, 0xee, 0x4f, 0x1b, 0x64, 0x0e, 0xc3, 0x9f, 0x22, 0x5a, 0xab, 0xe7, 0x21,
+	0xaa, 0x25, 0xaa, 0xbc, 0xcf, 0x10, 0xf2, 0x71, 0xc4, 0x02, 0x06, 0x65, 0xae, 0x25, 0x60, 0x7c,
+	0x0a, 0xb8, 0x15, 0xb8, 0x7b, 0x0f, 0x9b, 0x36, 0xc8, 0x52, 0x33, 0x4c, 0x80, 0x64, 0x72, 0x2a,
+	0x3c, 0x4b, 0xdf, 0x1d, 0x5f, 0x1e, 0x8a, 0x24, 0xa7, 0x8d, 0x85, 0xfd, 0xeb, 0xe4, 0xcb, 0x09,
+	0x5f, 0xe8, 0x65, 0x3f, 0xde, 0x04, 0x00, 0x00, 0xff, 0xff, 0xf1, 0x9d, 0x6a, 0x01, 0x5e, 0x03,
+	0x00, 0x00,
 }

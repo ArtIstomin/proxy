@@ -8,6 +8,7 @@ type ReqID int32
 // Request is central struct in the domain model
 type Request struct {
 	ID        ReqID `gorm:"primary_key`
+	URL       string
 	Request   []byte
 	Completed bool
 	CreatedAt time.Time

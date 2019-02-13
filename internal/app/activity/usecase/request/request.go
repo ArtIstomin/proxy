@@ -5,7 +5,7 @@ import "github.com/artistomin/proxy/internal/app/activity"
 // Service is the interface that provides request methods
 type Service interface {
 	CreateRequest(req *activity.Request) (activity.ReqID, error)
-	UpdateRequest(id activity.ID, req *activity.Request) error
+	UpdateRequest(id activity.ReqID, req *activity.Request) error
 }
 
 type service struct {

@@ -62,6 +62,43 @@ func (h *Handler) DefaultHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+/* func (h *Handler) StoreRequest(r *http.Request) (activity.ReqID, error) {
+	reqBytes, _ := httputil.DumpRequest(r, true)
+	payloadStore := &pb.ReqRequest{
+		Url:     r.URL.String(),
+		Request: reqBytes,
+	}
+	reply, err := h.GrpcClient.StoreRequest(context.Background(), payloadStore)
+	if err != nil {
+		return 0, err
+	}
+
+	return activity.ReqID(reply.ReqId), nil
+}
+
+func (h *Handler) UpdateReqAndStoreRes(reqID activity.ReqID, res *http.Response) error {
+	payloadUpdate := &pb.ReqRequest{
+		ReqId:     int32(reqID),
+		Completed: true,
+	}
+	_, err := h.GrpcClient.UpdateRequest(context.Background(), payloadUpdate)
+	if err != nil {
+		return err
+	}
+
+	resBytes, _ := httputil.DumpResponse(res, true)
+	payloadRes := &pb.ResRequest{
+		ReqId:    int32(reqID),
+		Response: resBytes,
+	}
+	_, err = h.GrpcClient.StoreResponse(context.Background(), payloadRes)
+	if err != nil {
+		return err
+	}
+
+	return nil
+} */
+
 // ShouldResCached checks should be response cached or not
 func (h *Handler) ShouldResCached(host, path string, bodySize int, cacheCfg config.Cache) bool {
 	if !cacheCfg.Enabled {

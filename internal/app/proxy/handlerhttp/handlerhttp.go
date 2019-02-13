@@ -89,7 +89,7 @@ func (hh *HttpHandler) handlerCache(w http.ResponseWriter, r *http.Request,
 		}
 
 		if hh.ShouldResCached(host, r.URL.Path, len(body), cacheCfg) {
-			ttl := time.Duration(cacheCfg.TTLSeconds)
+			ttl := time.Duration(cacheCfg.TTLSeconds) * time.Second
 			expireTime := time.Now().UTC().Add(ttl)
 			response := cache.Response{
 				Status:     res.Status,

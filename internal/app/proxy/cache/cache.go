@@ -20,10 +20,10 @@ type Value struct {
 }
 
 type Response struct {
-	Status     string
-	StatusCode int
-	Proto      string
-	ProtoMajor int
-	ProtoMinor int
-	Header     http.Header
+	Status     string      `json:"status"`
+	StatusCode int         `json:"status_code"`
+	Proto      string      `json:"proto"`
+	ProtoMajor int         `json:"proto_major"`
+	ProtoMinor int         `json:"proto_minor`
+	Header     http.Header `json:"header"`
 }
