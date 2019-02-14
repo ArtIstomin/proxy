@@ -9,19 +9,19 @@ import (
 	"github.com/golang/protobuf/ptypes/empty"
 )
 
-func (s *server) StoreRequest(ctx context.Context, in *pb.ReqRequest) (*empty.Empty, error) {
+func (s *server) StoreRequest(ctx context.Context, in *pb.ReqRequest) (*pb.ReqReply, error) {
 	payload := &activity.Request{
-		Request: in.Request,
-		URL:     in.Url,
+		Header: in.Header,
+		URL:    in.Url,
 	}
 
-	_, err := s.reqSvc.CreateRequest(payload)
+	id, err := s.reqSvc.CreateRequest(payload)
 
 	if err != nil {
 		return nil, err
 	}
 
-	return &empty.Empty{}, nil
+	return &pb.ReqReply{ReqId: int32(id)}, nil
 }
 
 func (s *server) UpdateRequest(ctx context.Context, in *pb.ReqRequest) (*empty.Empty, error) {
@@ -39,4 +39,26 @@ func (s *server) UpdateRequest(ctx context.Context, in *pb.ReqRequest) (*empty.E
 	}
 
 	return &empty.Empty{}, nil
+}
+
+func (s *server) GetRequests(ctx context.Context, in *empty.Empty) (*pb.GetRequestsReply, error) {
+	requests, err := s.reqSvc.GetRequests()
+
+	if err != nil {
+		return nil, err
+	}
+
+	var pbReqs []*pb.ReqRequest
+
+	for _, v := range requests {
+		pbReq := &pb.ReqRequest{
+			Url:    v.URL,
+			Header: v.Header,
+		}
+		pbReqs = append(pbReqs, pbReq)
+	}
+
+	pbRes := &pb.GetRequestsReply{Requests: pbReqs}
+
+	return pbRes, nil
 }

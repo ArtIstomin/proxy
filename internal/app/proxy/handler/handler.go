@@ -2,19 +2,24 @@ package handler
 
 import (
 	"bytes"
+	"context"
+	"encoding/json"
 	"io"
 	"log"
 	"net/http"
 
+	"github.com/artistomin/proxy/internal/app/activity"
 	"github.com/artistomin/proxy/internal/app/proxy/cache"
 	"github.com/artistomin/proxy/internal/app/proxy/config"
+	pb "github.com/artistomin/proxy/internal/pkg/proto/activity"
 )
 
 // Handler common structure for handler
 type Handler struct {
-	Cache  cache.Cacher
-	Config *config.Config
-	Tr     *http.Transport
+	Cache      cache.Cacher
+	Config     *config.Config
+	Tr         *http.Transport
+	GrpcClient pb.ActivityClient
 }
 
 func (h *Handler) FromCache(w http.ResponseWriter, r *http.Request) {
@@ -62,11 +67,11 @@ func (h *Handler) DefaultHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-/* func (h *Handler) StoreRequest(r *http.Request) (activity.ReqID, error) {
-	reqBytes, _ := httputil.DumpRequest(r, true)
+func (h *Handler) StoreRequest(r *http.Request) (activity.ReqID, error) {
+	headerBytes, _ := json.Marshal(r.Header)
 	payloadStore := &pb.ReqRequest{
-		Url:     r.URL.String(),
-		Request: reqBytes,
+		Url:    r.URL.String(),
+		Header: headerBytes,
 	}
 	reply, err := h.GrpcClient.StoreRequest(context.Background(), payloadStore)
 	if err != nil {
@@ -76,7 +81,7 @@ func (h *Handler) DefaultHandler(w http.ResponseWriter, r *http.Request) {
 	return activity.ReqID(reply.ReqId), nil
 }
 
-func (h *Handler) UpdateReqAndStoreRes(reqID activity.ReqID, res *http.Response) error {
+func (h *Handler) MarkReqCompleted(reqID activity.ReqID) error {
 	payloadUpdate := &pb.ReqRequest{
 		ReqId:     int32(reqID),
 		Completed: true,
@@ -86,18 +91,8 @@ func (h *Handler) UpdateReqAndStoreRes(reqID activity.ReqID, res *http.Response)
 		return err
 	}
 
-	resBytes, _ := httputil.DumpResponse(res, true)
-	payloadRes := &pb.ResRequest{
-		ReqId:    int32(reqID),
-		Response: resBytes,
-	}
-	_, err = h.GrpcClient.StoreResponse(context.Background(), payloadRes)
-	if err != nil {
-		return err
-	}
-
 	return nil
-} */
+}
 
 // ShouldResCached checks should be response cached or not
 func (h *Handler) ShouldResCached(host, path string, bodySize int, cacheCfg config.Cache) bool {

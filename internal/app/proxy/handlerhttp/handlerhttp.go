@@ -14,6 +14,7 @@ import (
 	"github.com/artistomin/proxy/internal/app/proxy/cache"
 	"github.com/artistomin/proxy/internal/app/proxy/config"
 	"github.com/artistomin/proxy/internal/app/proxy/handler"
+	pb "github.com/artistomin/proxy/internal/pkg/proto/activity"
 )
 
 type HttpHandler struct {
@@ -69,6 +70,11 @@ func (hh *HttpHandler) handlerCache(w http.ResponseWriter, r *http.Request,
 	case cacheCfg.Enabled && hh.Cache.Has(host, url):
 		hh.FromCache(w, r)
 	default:
+		reqID, err := hh.StoreRequest(r)
+		if err != nil {
+			log.Printf("store request error: %s", err)
+		}
+
 		res, err := hh.Tr.RoundTrip(r)
 		if err != nil {
 			log.Printf("request error: %s", err)
@@ -76,6 +82,11 @@ func (hh *HttpHandler) handlerCache(w http.ResponseWriter, r *http.Request,
 			return
 		}
 		defer res.Body.Close()
+
+		err = hh.MarkReqCompleted(reqID)
+		if err != nil {
+			log.Printf("update request error: %s", err)
+		}
 
 		bodyReader := io.TeeReader(res.Body, w)
 
@@ -106,6 +117,6 @@ func (hh *HttpHandler) handlerCache(w http.ResponseWriter, r *http.Request,
 }
 
 // New creates new http handler
-func New(cfg *config.Config, cache cache.Cacher, tr *http.Transport) *HttpHandler {
-	return &HttpHandler{handler.Handler{cache, cfg, tr}}
+func New(cfg *config.Config, cache cache.Cacher, tr *http.Transport, client pb.ActivityClient) *HttpHandler {
+	return &HttpHandler{handler.Handler{cache, cfg, tr, client}}
 }

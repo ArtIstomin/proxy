@@ -6,6 +6,7 @@ import "github.com/artistomin/proxy/internal/app/activity"
 type Service interface {
 	CreateRequest(req *activity.Request) (activity.ReqID, error)
 	UpdateRequest(id activity.ReqID, req *activity.Request) error
+	GetRequests() ([]*activity.Request, error)
 }
 
 type service struct {
@@ -30,6 +31,10 @@ func (s *service) UpdateRequest(id activity.ReqID, req *activity.Request) error 
 	}
 
 	return nil
+}
+
+func (s *service) GetRequests() ([]*activity.Request, error) {
+	return s.reqs.GetRequests()
 }
 
 // NewService creates a request service with dependencies

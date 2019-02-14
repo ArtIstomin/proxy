@@ -1,6 +1,8 @@
 package activity
 
-import "time"
+import (
+	"time"
+)
 
 // ReqID uniquely identifies a particular request.
 type ReqID int32
@@ -9,7 +11,7 @@ type ReqID int32
 type Request struct {
 	ID        ReqID `gorm:"primary_key`
 	URL       string
-	Request   []byte
+	Header    []byte
 	Completed bool
 	CreatedAt time.Time
 	UpdatedAt time.Time
@@ -19,4 +21,5 @@ type Request struct {
 type RequestRepo interface {
 	Create(req *Request) (ReqID, error)
 	Update(id ReqID, req *Request) error
+	GetRequests() ([]*Request, error)
 }

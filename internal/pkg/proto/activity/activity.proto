@@ -8,7 +8,8 @@ import "google/protobuf/timestamp.proto";
 option go_package = "activitypb";
 
 service Activity {
-    rpc StoreRequest(ReqRequest) returns (google.protobuf.Empty) {}
+    rpc StoreRequest(ReqRequest) returns (ReqReply) {}
+    rpc GetRequests(google.protobuf.Empty) returns (GetRequestsReply) {}
     rpc UpdateRequest(ReqRequest) returns (google.protobuf.Empty) {}
     rpc StoreResponse(ResRequest) returns (google.protobuf.Empty) {}
     rpc GetResponse(GetResRequest) returns (ResRequest) {}
@@ -18,8 +19,16 @@ service Activity {
 message ReqRequest {
     int32 reqId = 1;
     string url = 2;
-    bytes request = 3;
+    bytes header = 3;
     bool completed = 4;
+}
+
+message ReqReply {
+    int32 reqId = 1;
+}
+
+message GetRequestsReply {
+    repeated ReqRequest requests = 1;
 }
 
 message ResRequest {

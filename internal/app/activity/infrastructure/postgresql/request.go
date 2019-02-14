@@ -26,6 +26,16 @@ func (rr *requestRepo) Update(id activity.ReqID, req *activity.Request) error {
 	return nil
 }
 
+func (rr *requestRepo) GetRequests() ([]*activity.Request, error) {
+	var requests []*activity.Request
+
+	if err := rr.db.Where("completed = ?", false).Find(&requests).Error; err != nil {
+		return nil, err
+	}
+
+	return requests, nil
+}
+
 // NewRequestRepo returns a new instance of a Postgresql request repository
 func NewRequestRepo(db *gorm.DB) activity.RequestRepo {
 	return &requestRepo{db}
