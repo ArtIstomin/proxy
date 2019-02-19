@@ -11,6 +11,7 @@ import (
 	"github.com/artistomin/proxy/internal/app/proxy/grpcclient"
 	"github.com/artistomin/proxy/internal/app/proxy/handlerhttp"
 	"github.com/artistomin/proxy/internal/app/proxy/handlerhttps"
+	"github.com/artistomin/proxy/internal/app/proxy/retry"
 )
 
 var (
@@ -44,8 +45,9 @@ func main() {
 	}
 
 	transport := initTransport(cfg)
-	handlerHTTP := handlerhttp.New(cfg, storage, transport)
-	handlerHTTPS := handlerhttps.New(cfg, storage, transport)
+	retrier := retry.New(storage, transport, cfg, grpcClient)
+	handlerHTTP := handlerhttp.New(cfg, storage, transport, grpcClient)
+	handlerHTTPS := handlerhttps.New(cfg, storage, transport, grpcClient)
 
 	httpProxy := &http.Server{
 		Addr:    *httpPort,
@@ -55,6 +57,10 @@ func main() {
 		Addr:    *httpsPort,
 		Handler: handlerHTTPS,
 	}
+
+	go func() {
+		retrier.ProcessUncompletedReqs()
+	}()
 
 	log.Printf("Listening http on %s and https on %s\n", *httpPort, *httpsPort)
 	go func() {
