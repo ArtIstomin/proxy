@@ -1,0 +1,34 @@
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: activity-deployment
+  labels:
+    app: activity
+spec:
+  selector:
+    matchLabels:
+      app: activity
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        app: activity
+    spec:
+      containers:
+      - name: activity
+        image: aistom/activity
+        args: ["--dsn", "postgres://root:root@activity-postgres:5432/activity?sslmode=disable"]
+        ports:
+        - name: activity-svc
+          containerPort: 3000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: activity-service
+spec:
+  selector:
+    app: activity
+  ports:
+  - port: 3000
+    targetPort: activity-svc

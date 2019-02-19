@@ -23,6 +23,9 @@ run-compose:
 
 run-compose-with-build: build-container run-compose
 
+run-k8s:
+	./deployments/k8s/run-k8s.sh
+
 proto-all: proto-activity
 
 proto-activity:

@@ -1,0 +1,40 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: activity-postgres
+  labels:
+    app: activity-postgres
+spec:
+  type: NodePort
+  ports:
+   - port: 5432
+  selector:
+   app: activity-postgres
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: activity-postgres
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: activity-postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres
+          imagePullPolicy: "IfNotPresent"
+          ports:
+            - containerPort: 5432
+          envFrom:
+            - configMapRef:
+                name: activity-postgres-config
+          volumeMounts:
+            - mountPath: /var/lib/postgresql/data
+              name: postgredb
+      volumes:
+        - name: postgredb
+          persistentVolumeClaim:
+            claimName: activity-postgres-pv-claim
